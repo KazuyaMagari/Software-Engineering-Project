@@ -23,3 +23,13 @@
 - Code Versioning and Featuring: **GitHub**
 - Project Management Board: **Jira**
 - AI Based Feature: (via Hugging Face)
+
+# Project Team
+____________________
+## Frontend:
+- Alex Granata
+- Kazuya Magarifuchi
+# Backend: 
+- Matthew Adams
+- Hannah Lombardi
+____________________
