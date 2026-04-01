@@ -84,15 +84,15 @@ function Navbar() {
   return (
     <Header>
       <Inner>
-        <Brand href="/home" aria-label="TaskFlow home">
+        <Brand href="/" aria-label="TaskFlow home">
           <BrandBadge>TF</BrandBadge>
           <BrandText>TaskFlow</BrandText>
         </Brand>
 
         <nav aria-label="Primary navigation">
           <NavList>
-            <li><NavLink href="#" $active>Dashboard</NavLink></li>
-            <li><NavLink href="#">Tasks</NavLink></li>
+            <li><NavLink href="/" $active>Dashboard</NavLink></li>
+            <li><NavLink href="/task">Tasks</NavLink></li>
             <li><NavLink href="#">Calendar</NavLink></li>
             <li><NavLink href="#">Reports</NavLink></li>
           </NavList>
