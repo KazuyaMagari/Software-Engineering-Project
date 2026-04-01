@@ -1,5 +1,5 @@
-
 import styled from 'styled-components'
+import { Auth } from '../../auth/Auth'
 
 const Header = styled.header`
   background: #ffffff;
@@ -80,17 +80,6 @@ const NavLink = styled.a<{ $active?: boolean }>`
   }
 `
 
-const LoginButton = styled.button`
-  border: 1px solid #111827;
-  background: #111827;
-  color: #fff;
-  border-radius: 8px;
-  padding: 0.45rem 0.8rem;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 500;
-  cursor: pointer;
-`
-
 function Navbar() {
   return (
     <Header>
@@ -109,7 +98,7 @@ function Navbar() {
           </NavList>
         </nav>
 
-        <LoginButton type="button" aria-label="Log in">Login</LoginButton>
+        <Auth />
       </Inner>
     </Header>
   )
