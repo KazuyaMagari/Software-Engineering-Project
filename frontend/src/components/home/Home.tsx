@@ -1,11 +1,39 @@
+import { useState } from 'react'
 import Navbar from './Navbar'
 import Footer from './Footert'
+import { TaskFormModal } from '../common/TaskFormModal'
+import { useTaskForm } from '../../hooks/useTaskForm'
 import styled from 'styled-components'
+import type { Task as TaskType } from '../../types/type'
 
-const myTasks = [
-  { title: 'API Integration: Task Comments', due: 'Today 18:00', priority: 'High', status: 'In progress' },
-  { title: 'Sprint Planning Notes', due: 'Tomorrow 10:00', priority: 'Medium', status: 'Open' },
-  { title: 'UI Fix: Mobile Navbar', due: 'Mar 24', priority: 'Low', status: 'Review' },
+const myTasksData: TaskType[] = [
+  {
+    id: '1',
+    title: 'API Integration: Task Comments',
+    due: 'Today 18:00',
+    priority: 'High',
+    status: 'In progress',
+    description: 'Integrate task comments API endpoint',
+    createdAt: '2026-03-20',
+  },
+  {
+    id: '2',
+    title: 'Sprint Planning Notes',
+    due: 'Tomorrow 10:00',
+    priority: 'Medium',
+    status: 'Open',
+    description: 'Document sprint planning decisions',
+    createdAt: '2026-03-20',
+  },
+  {
+    id: '3',
+    title: 'UI Fix: Mobile Navbar',
+    due: 'Mar 24',
+    priority: 'Low',
+    status: 'Review',
+    description: 'Fix responsive design issues',
+    createdAt: '2026-03-18',
+  },
 ]
 
 const timeline = [
@@ -255,6 +283,32 @@ const FullButton = styled(BtnPrimary)`
 `
 
 function Home() {
+  const [myTasks, setMyTasks] = useState<TaskType[]>(myTasksData)
+  const {
+    formMode,
+    formData,
+    setFormData,
+    handleAddTask,
+    handleCancel,
+    handleSaveTask,
+  } = useTaskForm()
+
+  const handleSaveTaskForm = (e: React.FormEvent) => {
+    const result = handleSaveTask(e, myTasks)
+    if (result.success) {
+      setMyTasks(result.tasks)
+    }
+  }
+
+  const getPriorityColor = (priority: string) => {
+    const colors: Record<string, string> = {
+      High: '#ef4444',
+      Medium: '#f59e0b',
+      Low: '#10b981',
+    }
+    return colors[priority] || '#6b7280'
+  }
+
   return (
     <Page>
       <Navbar />
@@ -268,7 +322,9 @@ function Home() {
               Track priorities, align teammates, and keep delivery predictable with clear ownership and live progress.
             </HeroDescription>
             <HeroActions>
-              <BtnPrimary type="button">Create Task</BtnPrimary>
+              <BtnPrimary type="button" onClick={handleAddTask}>
+                Create Task
+              </BtnPrimary>
               <BtnGhost type="button">View Reports</BtnGhost>
             </HeroActions>
           </HeroCopy>
@@ -297,7 +353,7 @@ function Home() {
             </PanelHeader>
             <TaskList>
               {myTasks.map((task) => (
-                <TaskItem key={task.title}>
+                <TaskItem key={task.id} style={{ borderLeftColor: getPriorityColor(task.priority), borderLeftWidth: '3px' }}>
                   <div>
                     <TaskTitle>{task.title}</TaskTitle>
                     <TaskMeta>Due {task.due}</TaskMeta>
@@ -316,10 +372,20 @@ function Home() {
             <PanelCopy>
               Smart planning suggestions are available. Ask for workload balancing, overdue risk prediction, and next best actions.
             </PanelCopy>
-              <FullButton type="button">Apply Suggestion</FullButton>
+            <FullButton type="button">Apply Suggestion</FullButton>
           </Panel>
         </ContentGrid>
       </Main>
+
+      {/* Task Form Modal */}
+      <TaskFormModal
+        isOpen={formMode !== null}
+        mode={formMode}
+        formData={formData}
+        onFormDataChange={setFormData}
+        onSave={handleSaveTaskForm}
+        onCancel={handleCancel}
+      />
 
       <Footer />
     </Page>
