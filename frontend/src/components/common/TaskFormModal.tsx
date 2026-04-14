@@ -1,5 +1,6 @@
 import styled from 'styled-components'
 import type { Task as TaskType, TaskPriority, TaskStatus } from '../../types/type'
+import { useState, useEffect } from 'react'
 
 const ModalOverlay = styled.div<{ $isOpen: boolean }>`
   display: ${(props) => (props.$isOpen ? 'flex' : 'none')};
@@ -142,6 +143,85 @@ export function TaskFormModal({
   onSave,
   onCancel,
 }: TaskFormModalProps) {
+
+  const [prompt, setPrompt] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const [loadingDots, setLoadingDots] = useState(".");
+
+  // Loading animation loop
+  useEffect(() => {
+    if (!loading) return;
+
+    const interval = setInterval(() => {
+      setLoadingDots(prev => (prev === "..." ? "." : prev + "."));
+    }, 400);
+
+    return () => clearInterval(interval);
+  }, [loading]);
+
+  async function handleGenerate() {
+    if (!prompt.trim()) return;
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(
+        "https://router.huggingface.co/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${import.meta.env.VITE_HUGGING_FACE}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "zai-org/GLM-5.1:together",
+            messages: [
+              {
+                role: "user",
+                content: `
+Generate a task in STRICT JSON format:
+Due format looks like "Mar 25, 10:00". If due date is not clear, leave it empty.
+{
+  "title": "",
+  "description": "",
+  "due": ""
+}
+
+User prompt: ${prompt}
+
+Return ONLY valid JSON. No commentary.
+                `,
+              },
+            ],
+          }),
+        }
+      );
+
+      const result = await response.json();
+      const text = result?.choices?.[0]?.message?.content || "";
+
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        console.error("AI did not return valid JSON:", text);
+        return;
+      }
+
+      onFormDataChange({
+        ...formData,
+        title: parsed.title || "",
+        description: parsed.description || "",
+        due: parsed.due || "",
+      });
+
+    } catch (err) {
+      console.error("AI generation failed:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <ModalOverlay $isOpen={isOpen} onClick={() => isOpen && onCancel()}>
       <Modal onClick={(e) => e.stopPropagation()}>
@@ -181,42 +261,39 @@ export function TaskFormModal({
             />
           </FormGroup>
 
+          {/* AI PROMPT SECTION */}
           <FormGroup>
-            <Label htmlFor="priority">Priority</Label>
-            <Select
-              id="priority"
-              value={formData.priority || 'Medium'}
-              onChange={(e) =>
-                onFormDataChange({
-                  ...formData,
-                  priority: e.target.value as TaskPriority,
-                })
-              }
-            >
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </Select>
-          </FormGroup>
+            <Label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <img
+                src="/Logo.png"
+                alt="auto-generate"
+                style={{ width: 16, height: 16 }}
+              />
+              Auto‑generate task with prompt
+            </Label>
 
-          <FormGroup>
-            <Label htmlFor="status">Status</Label>
-            <Select
-              id="status"
-              value={formData.status || 'Open'}
-              onChange={(e) =>
-                onFormDataChange({
-                  ...formData,
-                  status: e.target.value as TaskStatus,
-                })
-              }
-            >
-              <option value="Open">Open</option>
-              <option value="In progress">In Progress</option>
-              <option value="Review">Review</option>
-              <option value="Completed">Completed</option>
-              <option value="Overdue">Overdue</option>
-            </Select>
+            <TextArea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="I'll generate a task based on this prompt!"
+              style={{ minHeight: "70px" }}
+            />
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", alignSelf: "center" }}>
+              <BtnPrimary 
+                type="button" 
+                onClick={handleGenerate}
+                disabled={loading}
+              >
+                {loading ? "Generating..." : "Generate"}
+              </BtnPrimary>
+
+              {loading && (
+                <span style={{ fontFamily: "Outfit", fontSize: "0.9rem" }}>
+                  Loading{loadingDots}
+                </span>
+              )}
+            </div>
           </FormGroup>
 
           <FormActions>
