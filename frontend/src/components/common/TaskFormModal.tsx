@@ -1,8 +1,8 @@
 import styled from 'styled-components'
 import type { Task as TaskType, TaskPriority, TaskStatus } from '../../types/type'
 
-const ModalOverlay = styled.div<{ isOpen: boolean }>`
-  display: ${(props) => (props.isOpen ? 'flex' : 'none')};
+const ModalOverlay = styled.div<{ $isOpen: boolean }>`
+  display: ${(props) => (props.$isOpen ? 'flex' : 'none')};
   position: fixed;
   top: 0;
   left: 0;
@@ -143,7 +143,7 @@ export function TaskFormModal({
   onCancel,
 }: TaskFormModalProps) {
   return (
-    <ModalOverlay isOpen={isOpen} onClick={() => isOpen && onCancel()}>
+    <ModalOverlay $isOpen={isOpen} onClick={() => isOpen && onCancel()}>
       <Modal onClick={(e) => e.stopPropagation()}>
         <ModalTitle>{mode === 'add' ? 'Add New Task' : 'Edit Task'}</ModalTitle>
 
