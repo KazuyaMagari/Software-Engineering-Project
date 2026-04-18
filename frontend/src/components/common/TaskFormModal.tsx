@@ -164,7 +164,7 @@ export function TaskFormModal({
                 role: "user",
                 content: `
 Generate a task in STRICT JSON format:
-Due format looks like "Mar 25, 10:00". If due date is not clear, leave it empty.
+Due date format MUST be YYYY-MM-DD (e.g., "2026-04-25"). If due date is not clear, leave it empty.
 {
   "title": "",
   "description": "",

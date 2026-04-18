@@ -3,6 +3,7 @@ import Navbar from './Navbar'
 import Footer from './Footert'
 import { TaskFormModal } from '../common/TaskFormModal'
 import { useTaskForm } from '../../hooks/useTaskForm'
+import { auth } from '../../auth/Auth'
 import styled from 'styled-components'
 import type { Task as TaskType } from '../../types/type'
 
@@ -293,10 +294,51 @@ function Home() {
     handleSaveTask,
   } = useTaskForm()
 
-  const handleSaveTaskForm = (e: React.FormEvent) => {
+  const handleSaveTaskForm = async (e: React.FormEvent) => {
     const result = handleSaveTask(e, myTasks)
-    if (result.success) {
-      setMyTasks(result.tasks)
+    if (result.success && result.newTask && auth.currentUser?.email) {
+      try {
+        // Format due date to YYYY-MM-DD if it's in other format
+        let dueDate = result.newTask.due || null;
+        if (dueDate) {
+          // If already in YYYY-MM-DD format, keep it
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+            // Try to parse and convert
+            const dateObj = new Date(dueDate);
+            if (!isNaN(dateObj.getTime())) {
+              dueDate = dateObj.toISOString().split('T')[0];
+            } else {
+              dueDate = null;
+            }
+          }
+        }
+
+        // Send to backend
+        const response = await fetch('http://localhost:3000/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: auth.currentUser.email,
+            title: result.newTask.title,
+            description: result.newTask.description,
+            priority: result.newTask.priority,
+            status: result.newTask.status,
+            due_date: dueDate,
+          }),
+        });
+
+        if (response.ok) {
+          console.log('✅ Task created successfully in database');
+          setMyTasks(result.tasks)
+        } else {
+          const error = await response.json();
+          console.error('Failed to save task:', error);
+          alert('Failed to save task. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error saving task:', error);
+        alert('Error saving task. Please check backend connection.');
+      }
     }
   }
 
