@@ -1,5 +1,5 @@
 import styled from 'styled-components'
-import type { Task as TaskType, TaskPriority, TaskStatus } from '../../types/type'
+import type { Task as TaskType} from '../../types/type'
 import { useState, useEffect } from 'react'
 
 const ModalOverlay = styled.div<{ $isOpen: boolean }>`
@@ -67,22 +67,6 @@ const TextArea = styled.textarea`
   font-size: 0.9rem;
   resize: vertical;
   min-height: 80px;
-
-  &:focus {
-    outline: none;
-    border-color: #111827;
-    box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.1);
-  }
-`
-
-const Select = styled.select`
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 0.625rem 0.75rem;
-  font-family: 'Outfit', sans-serif;
-  font-size: 0.9rem;
-  background: white;
-  cursor: pointer;
 
   &:focus {
     outline: none;
@@ -180,7 +164,7 @@ export function TaskFormModal({
                 role: "user",
                 content: `
 Generate a task in STRICT JSON format:
-Due format looks like "Mar 25, 10:00". If due date is not clear, leave it empty.
+Due date format MUST be YYYY-MM-DD (e.g., "2026-04-25"). If due date is not clear, leave it empty.
 {
   "title": "",
   "description": "",

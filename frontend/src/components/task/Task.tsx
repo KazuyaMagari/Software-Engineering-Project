@@ -1,10 +1,12 @@
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import styled from 'styled-components'
+import { onAuthStateChanged } from 'firebase/auth'
 import Navbar from '../home/Navbar'
 import Footer from '../home/Footert'
 import { TaskFormModal } from '../common/TaskFormModal'
 import { useTaskForm } from '../../hooks/useTaskForm'
+import { auth } from '../../auth/Auth'
 import type { Task as TaskType, TaskPriority, TaskStatus } from '../../types/type'
 
 // Mock data
@@ -148,18 +150,18 @@ const CardCount = styled.span`
   font-weight: 600;
 `
 
-const TasksContainer = styled.div<{ isDragOver: boolean }>`
+const TasksContainer = styled.div<{ $isDragOver: boolean }>`
   flex: 1;
   padding: 1rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  background: ${(props) => (props.isDragOver ? '#f0f9ff' : '#f9fafb')};
+  background: ${(props) => (props.$isDragOver ? '#f0f9ff' : '#f9fafb')};
   transition: background-color 0.2s ease;
 `
 
-const TaskCard = styled.div<{ priority: TaskPriority; isDragging: boolean }>`
+const TaskCard = styled.div<{ priority: TaskPriority; $isDragging: boolean }>`
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-left: 4px solid
@@ -171,9 +173,9 @@ const TaskCard = styled.div<{ priority: TaskPriority; isDragging: boolean }>`
   padding: 1rem;
   cursor: grab;
   transition: all 0.2s ease;
-  opacity: ${(props) => (props.isDragging ? 0.5 : 1)};
+  opacity: ${(props) => (props.$isDragging ? 0.5 : 1)};
   box-shadow: ${(props) =>
-    props.isDragging ? '0 10px 15px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.05)'};
+    props.$isDragging ? '0 10px 15px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.05)'};
 
   &:active {
     cursor: grabbing;
@@ -260,11 +262,53 @@ const BtnPrimary = styled(Btn)`
 `
 
 function Task() {
-  const [tasks, setTasks] = useState<TaskType[]>(initialMockTasks)
+  const [tasks, setTasks] = useState<TaskType[]>([])
+  const [loading, setLoading] = useState(true)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null)
   
   const { formMode, formData, setFormData, handleAddTask, handleEditTask, handleCancel, handleSaveTask } = useTaskForm()
+
+  // Fetch tasks from backend on component mount
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      try {
+        if (!user?.email) {
+          console.log('No user logged in');
+          setLoading(false);
+          return;
+        }
+
+        console.log('User logged in:', user.email);
+
+        const response = await fetch(
+          `http://localhost:3000/api/tasks?email=${encodeURIComponent(user.email)}`
+        );
+        const data = await response.json();
+
+        if (data.success) {
+          // Format data from API to match TaskType
+          const formattedTasks = data.tasks.map((task: any) => ({
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            due: task.due_date || '',
+            priority: task.priority,
+            status: task.status,
+            createdAt: task.created_at?.split('T')[0] || '',
+          }));
+          setTasks(formattedTasks);
+          console.log('✅ Tasks loaded:', formattedTasks);
+        }
+      } catch (error) {
+        console.error('Error fetching tasks:', error);
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const tasksByStatus = useMemo(() => {
     const grouped: Record<TaskStatus, TaskType[]> = {
@@ -284,10 +328,48 @@ function Task() {
     setTasks(tasks.filter((task) => task.id !== id))
   }
 
-  const handleSaveTaskForm = (e: React.FormEvent) => {
+  const handleSaveTaskForm = async (e: React.FormEvent) => {
     const result = handleSaveTask(e, tasks)
-    if (result.success) {
-      setTasks(result.tasks)
+    if (result.success && result.newTask && auth.currentUser?.email) {
+      try {
+        // Format due date to YYYY-MM-DD if needed
+        let dueDate = result.newTask.due || null;
+        if (dueDate) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+            const dateObj = new Date(dueDate);
+            if (!isNaN(dateObj.getTime())) {
+              dueDate = dateObj.toISOString().split('T')[0];
+            } else {
+              dueDate = null;
+            }
+          }
+        }
+
+        const response = await fetch('http://localhost:3000/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: auth.currentUser.email,
+            title: result.newTask.title,
+            description: result.newTask.description,
+            priority: result.newTask.priority,
+            status: result.newTask.status,
+            due_date: dueDate,
+          }),
+        });
+
+        if (response.ok) {
+          console.log('✅ Task created and saved to database');
+          setTasks(result.tasks);
+        } else {
+          const error = await response.json();
+          console.error('Failed to save task:', error);
+          alert('Failed to save task. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error saving task:', error);
+        alert('Error saving task. Please check backend connection.');
+      }
     }
   }
 
@@ -341,16 +423,25 @@ function Task() {
           <BtnPrimary onClick={handleAddTask}>+ New Task</BtnPrimary>
         </Header>
 
-        <BoardContainer>
-          {BOARD_COLUMNS.map(({ status, label }) => (
-            <BoardColumn key={status}>
+        {loading ? (
+          <div style={{ textAlign: 'center', paddingTop: '2rem', color: '#6b7280' }}>
+            <p>Loading your tasks...</p>
+          </div>
+        ) : tasks.length === 0 ? (
+          <div style={{ textAlign: 'center', paddingTop: '2rem', color: '#6b7280' }}>
+            <p>No tasks yet. Create one to get started!</p>
+          </div>
+        ) : (
+          <BoardContainer>
+            {BOARD_COLUMNS.map(({ status, label }) => (
+              <BoardColumn key={status}>
               <ColumnHeader>
                 <ColumnTitle>{label}</ColumnTitle>
                 <CardCount>{tasksByStatus[status].length}</CardCount>
               </ColumnHeader>
 
               <TasksContainer
-                isDragOver={dragOverColumn === status}
+                $isDragOver={dragOverColumn === status}
                 onDragOver={handleDragOver}
                 onDragEnter={() => handleDragEnter(status)}
                 onDragLeave={handleDragLeave}
@@ -360,7 +451,7 @@ function Task() {
                   <TaskCard
                     key={task.id}
                     priority={task.priority}
-                    isDragging={draggedTaskId === task.id}
+                    $isDragging={draggedTaskId === task.id}
                     draggable
                     onDragStart={(e) => handleDragStart(e, task.id)}
                     onDragEnd={handleDragEnd}
@@ -384,6 +475,8 @@ function Task() {
             </BoardColumn>
           ))}
         </BoardContainer>
+        )}
+
       </Main>
 
       {/* Modal Form */}

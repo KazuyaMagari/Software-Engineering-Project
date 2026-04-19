@@ -62,7 +62,33 @@ export function Auth() {
   const handleGoogleSignIn = async () => {
     try {
       setError("");
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+
+      console.log("✅ Login successful!");
+      console.log("User email:", user.email);
+
+      // Register/get user in backend
+      if (user.email) {
+        try {
+          const registerResponse = await fetch('http://localhost:3000/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email }),
+          });
+          const registerData = await registerResponse.json();
+          console.log("Backend response:", registerData);
+
+          // Fetch user tasks
+          const tasksResponse = await fetch(
+            `http://localhost:3000/api/tasks?email=${encodeURIComponent(user.email)}`
+          );
+          const tasksData = await tasksResponse.json();
+          console.log("User tasks:", tasksData);
+        } catch (error) {
+          console.error("Backend connection error:", error);
+        }
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Google sign-in failed";
       setError(errorMessage);
