@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { onAuthStateChanged } from 'firebase/auth'
 import Navbar from './Navbar'
 import Footer from './Footert'
 import { TaskFormModal } from '../common/TaskFormModal'
@@ -7,41 +8,28 @@ import { auth } from '../../auth/Auth'
 import styled from 'styled-components'
 import type { Task as TaskType } from '../../types/type'
 
-const myTasksData: TaskType[] = [
-  {
-    id: '1',
-    title: 'API Integration: Task Comments',
-    due: 'Today 18:00',
-    priority: 'High',
-    status: 'In progress',
-    description: 'Integrate task comments API endpoint',
-    createdAt: '2026-03-20',
-  },
-  {
-    id: '2',
-    title: 'Sprint Planning Notes',
-    due: 'Tomorrow 10:00',
-    priority: 'Medium',
-    status: 'Open',
-    description: 'Document sprint planning decisions',
-    createdAt: '2026-03-20',
-  },
-  {
-    id: '3',
-    title: 'UI Fix: Mobile Navbar',
-    due: 'Mar 24',
-    priority: 'Low',
-    status: 'Review',
-    description: 'Fix responsive design issues',
-    createdAt: '2026-03-18',
-  },
-]
-
-const timeline = [
-  { label: 'Completed', value: '24', hint: 'Tasks this week' },
-  { label: 'On Track', value: '11', hint: 'Current sprint' },
-  { label: 'Overdue', value: '3', hint: 'Need attention' },
-]
+// Helper function to format due date
+const formatDueDate = (dateString: string | undefined): string => {
+  if (!dateString) return 'No date'
+  
+  const date = new Date(dateString)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  
+  const dueDate = new Date(dateString)
+  dueDate.setHours(0, 0, 0, 0)
+  
+  if (dueDate.getTime() === today.getTime()) {
+    return 'Today'
+  } else if (dueDate.getTime() === tomorrow.getTime()) {
+    return 'Tomorrow'
+  } else {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+}
 
 const Page = styled.div`
   min-height: 100vh;
@@ -284,7 +272,9 @@ const FullButton = styled(BtnPrimary)`
 `
 
 function Home() {
-  const [myTasks, setMyTasks] = useState<TaskType[]>(myTasksData)
+  const [myTasks, setMyTasks] = useState<TaskType[]>([])
+  const [stats, setStats] = useState({ completed: 0, onTrack: 0, overdue: 0 })
+  const [loading, setLoading] = useState(true)
   const {
     formMode,
     formData,
@@ -294,13 +284,59 @@ function Home() {
     handleSaveTask,
   } = useTaskForm()
 
+  // Fetch tasks from backend
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user?.email) {
+        try {
+          setLoading(true)
+          const response = await fetch(`http://localhost:3000/api/tasks?email=${user.email}`)
+          const data = await response.json()
+
+          if (data.success && data.tasks && Array.isArray(data.tasks)) {
+            // Transform tasks to match TaskType (convert DB format to UI format)
+            const transformedTasks: TaskType[] = data.tasks.map((task: any) => ({
+              id: task.id,
+              title: task.title,
+              due: formatDueDate(task.due_date),
+              priority: task.priority,
+              status: task.status,
+              description: task.description || '',
+              createdAt: task.created_at,
+            }))
+
+            setMyTasks(transformedTasks)
+
+            // Calculate stats
+            const completed = data.tasks.filter((t: any) => t.status === 'Completed').length
+            const onTrack = data.tasks.filter((t: any) =>
+              ['Open', 'In progress', 'Review'].includes(t.status)
+            ).length
+            const overdue = data.tasks.filter((t: any) => t.status === 'Overdue').length
+
+            setStats({ completed, onTrack, overdue })
+          }
+        } catch (error) {
+          console.error('Failed to fetch tasks:', error)
+          setMyTasks([])
+        } finally {
+          setLoading(false)
+        }
+      } else {
+        setLoading(false)
+      }
+    })
+
+    return () => unsubscribe()
+  }, [])
+
   const handleSaveTaskForm = async (e: React.FormEvent) => {
     const result = handleSaveTask(e, myTasks)
     if (result.success && result.newTask && auth.currentUser?.email) {
       try {
         // Format due date to YYYY-MM-DD if it's in other format
         let dueDate = result.newTask.due || null;
-        if (dueDate) {
+        if (dueDate && dueDate !== 'No date' && dueDate !== 'Today' && dueDate !== 'Tomorrow') {
           // If already in YYYY-MM-DD format, keep it
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
             // Try to parse and convert
@@ -311,6 +347,8 @@ function Home() {
               dueDate = null;
             }
           }
+        } else if (dueDate === 'Today' || dueDate === 'Tomorrow') {
+          dueDate = null; // Convert relative dates back to null for backend
         }
 
         // Send to backend
@@ -328,8 +366,28 @@ function Home() {
         });
 
         if (response.ok) {
+          const taskResponse = await response.json();
           console.log('✅ Task created successfully in database');
-          setMyTasks(result.tasks)
+          
+          // Add the new task from backend response to local state
+          if (taskResponse.task) {
+            const newTask: TaskType = {
+              id: taskResponse.task.id,
+              title: taskResponse.task.title,
+              due: formatDueDate(taskResponse.task.due_date),
+              priority: taskResponse.task.priority,
+              status: taskResponse.task.status,
+              description: taskResponse.task.description || '',
+              createdAt: taskResponse.task.created_at,
+            }
+            setMyTasks([newTask, ...myTasks])
+            
+            // Update stats
+            const completed = (newTask.status === 'Completed' ? 1 : 0) + stats.completed
+            const onTrack = (['Open', 'In progress', 'Review'].includes(newTask.status) ? 1 : 0) + stats.onTrack
+            const overdue = (newTask.status === 'Overdue' ? 1 : 0) + stats.overdue
+            setStats({ completed, onTrack, overdue })
+          }
         } else {
           const error = await response.json();
           console.error('Failed to save task:', error);
@@ -378,13 +436,21 @@ function Home() {
         </HeroPanel>
 
         <OverviewGrid aria-label="Project overview">
-          {timeline.map((item) => (
-            <MetricCard key={item.label}>
-              <Label>{item.label}</Label>
-              <MetricValue>{item.value}</MetricValue>
-              <Label>{item.hint}</Label>
-            </MetricCard>
-          ))}
+          <MetricCard>
+            <Label>Completed</Label>
+            <MetricValue>{stats.completed}</MetricValue>
+            <Label>Tasks this week</Label>
+          </MetricCard>
+          <MetricCard>
+            <Label>On Track</Label>
+            <MetricValue>{stats.onTrack}</MetricValue>
+            <Label>Current sprint</Label>
+          </MetricCard>
+          <MetricCard>
+            <Label>Overdue</Label>
+            <MetricValue>{stats.overdue}</MetricValue>
+            <Label>Need attention</Label>
+          </MetricCard>
         </OverviewGrid>
 
         <ContentGrid>
@@ -393,20 +459,26 @@ function Home() {
               <h2 id="my-tasks-title">My Tasks</h2>
               <PanelLink href="#">See all</PanelLink>
             </PanelHeader>
-            <TaskList>
-              {myTasks.map((task) => (
-                <TaskItem key={task.id} style={{ borderLeftColor: getPriorityColor(task.priority), borderLeftWidth: '3px' }}>
-                  <div>
-                    <TaskTitle>{task.title}</TaskTitle>
-                    <TaskMeta>Due {task.due}</TaskMeta>
-                  </div>
-                  <TaskTags>
-                    <Tag>{task.priority}</Tag>
-                    <StatusTag>{task.status}</StatusTag>
-                  </TaskTags>
-                </TaskItem>
-              ))}
-            </TaskList>
+            {loading ? (
+              <PanelCopy>Loading tasks...</PanelCopy>
+            ) : myTasks.length === 0 ? (
+              <PanelCopy>No tasks yet. Create one to get started!</PanelCopy>
+            ) : (
+              <TaskList>
+                {myTasks.map((task) => (
+                  <TaskItem key={task.id} style={{ borderLeftColor: getPriorityColor(task.priority), borderLeftWidth: '3px' }}>
+                    <div>
+                      <TaskTitle>{task.title}</TaskTitle>
+                      <TaskMeta>Due {task.due}</TaskMeta>
+                    </div>
+                    <TaskTags>
+                      <Tag>{task.priority}</Tag>
+                      <StatusTag>{task.status}</StatusTag>
+                    </TaskTags>
+                  </TaskItem>
+                ))}
+              </TaskList>
+            )}
           </Panel>
 
           <Panel aria-labelledby="ai-title">
