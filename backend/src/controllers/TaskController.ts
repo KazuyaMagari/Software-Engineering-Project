@@ -46,7 +46,7 @@ export class TaskController {
       }
 
       // Format due_date
-      let formattedDueDate = null;
+      let formattedDueDate: string | undefined = undefined;
       if (due_date && due_date.trim()) {
         let dateObj: Date | null = null;
 
