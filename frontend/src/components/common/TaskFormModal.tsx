@@ -241,7 +241,7 @@ Return ONLY valid JSON. No commentary.
               type="text"
               value={formData.due || ''}
               onChange={(e) => onFormDataChange({ ...formData, due: e.target.value })}
-              placeholder="e.g., Mar 25, 10:00"
+              placeholder="e.g., 2027-04-25, 00:00"
             />
           </FormGroup>
 
