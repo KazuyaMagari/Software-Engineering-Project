@@ -15,19 +15,33 @@
   - Focus on the overall user interface and user experience (UI/UX). Ensure the app is responsive and intuitive, using a modern framework (e.g., React).
 - Database
   - Database management, data handling and security measures.
+---
+## Software Used
 
-## Technical Requirements:
+**Authentication:** [Firebase](https://firebase.google.com/)
 
-- Authentication via a formal authentication system: **auth0**
-- Online Database: **Neon**
-- Online Storage: (Google Cloud Storage via Google Cloud Storage, Firebase, Azure, Amazon, Dropbox)
-- Online Hosting: (Netlify or Vercel)
-- Code Versioning and Featuring: **GitHub**
-- Project Management Board: **Jira**
-- AI Based Feature: (via Hugging Face)
+**Storage:** [Google Cloud Storage via Google Cloud Storage, Firebase, Azure, Amazon, Dropbox](#)
 
-In progress UI (3/21 Kazuya)
+**Hosting:** [Netlify or Vercel](#)
 
-## Sample UI
+**Code Versioning and Featuring:** [Github](https://github.com/)
+
+**Task Manager for project:** [Jira](https://www.atlassian.com/software/jira)
+
+**Database:** [Neon](https://neon.com/)
+
+**Artificial Intelligence:** [Zai-org/GLM-5.1 (Hugging Face)](https://huggingface.co/zai-org/GLM-5.1)
+
+## Frontend: Kazuya & Alex
+**Frontend tools used:**
+- [React](https://react.dev/)
+- [Typscript](https://www.typescriptlang.org/)
+- [Vite](https://vite.dev/)
+
+## Backend: Matthew
+**Backend tools used:**
+- [Express.js](https://expressjs.com/)
+---
+## In progress UI (3/21 Kazuya)
 
 ![Sample UI](frontend/public/sample-UI.png)
