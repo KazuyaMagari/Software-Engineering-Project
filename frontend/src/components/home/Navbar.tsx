@@ -1,4 +1,5 @@
 import styled from 'styled-components'
+import { Link, useLocation } from 'react-router-dom'
 import { Auth } from '../../auth/Auth'
 
 const Header = styled.header`
@@ -26,7 +27,7 @@ const Inner = styled.div`
   }
 `
 
-const Brand = styled.a`
+const Brand = styled(Link)`
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
@@ -65,7 +66,7 @@ const NavList = styled.ul`
   }
 `
 
-const NavLink = styled.a<{ $active?: boolean }>`
+const NavLink = styled(Link)<{ $active?: boolean }>`
   text-decoration: none;
   color: ${({ $active }) => ($active ? '#111827' : '#6b7280')};
   background: ${({ $active }) => ($active ? '#f3f4f6' : 'transparent')};
@@ -81,20 +82,21 @@ const NavLink = styled.a<{ $active?: boolean }>`
 `
 
 function Navbar() {
+  const location = useLocation()
+
   return (
     <Header>
       <Inner>
-        <Brand href="/" aria-label="TaskFlow home">
+        <Brand to="/" aria-label="TaskFlow home">
           <BrandBadge>TF</BrandBadge>
           <BrandText>TaskFlow</BrandText>
         </Brand>
 
         <nav aria-label="Primary navigation">
           <NavList>
-            <li><NavLink href="/" $active>Dashboard</NavLink></li>
-            <li><NavLink href="/task">Tasks</NavLink></li>
-            <li><NavLink href="#">Calendar</NavLink></li>
-            <li><NavLink href="#">Reports</NavLink></li>
+            <li><NavLink to="/" $active={location.pathname === '/'}>Home</NavLink></li>
+            <li><NavLink to="/dashboard" $active={location.pathname === '/dashboard'}>Dashboard</NavLink></li>
+            <li><NavLink to="/task" $active={location.pathname === '/task'}>Tasks</NavLink></li>
           </NavList>
         </nav>
 

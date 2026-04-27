@@ -75,6 +75,61 @@ export class Task {
   }
 
   /**
+   * Update task (all fields)
+   */
+  static async update(
+    taskId: string,
+    updates: {
+      title?: string;
+      description?: string;
+      priority?: string;
+      status?: string;
+      due_date?: string;
+    }
+  ): Promise<ITask> {
+    try {
+      const fields: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (updates.title !== undefined) {
+        fields.push(`title = $${paramIndex++}`);
+        values.push(updates.title);
+      }
+      if (updates.description !== undefined) {
+        fields.push(`description = $${paramIndex++}`);
+        values.push(updates.description || null);
+      }
+      if (updates.priority !== undefined) {
+        fields.push(`priority = $${paramIndex++}`);
+        values.push(updates.priority);
+      }
+      if (updates.status !== undefined) {
+        fields.push(`status = $${paramIndex++}`);
+        values.push(updates.status);
+      }
+      if (updates.due_date !== undefined) {
+        fields.push(`due_date = $${paramIndex++}`);
+        values.push(updates.due_date || null);
+      }
+
+      if (fields.length === 0) {
+        throw new Error('No fields to update');
+      }
+
+      fields.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(taskId);
+
+      const query = `UPDATE tasks SET ${fields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+      const result = await pool.query(query, values);
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error updating task:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Delete a task
    */
   static async delete(taskId: string): Promise<boolean> {

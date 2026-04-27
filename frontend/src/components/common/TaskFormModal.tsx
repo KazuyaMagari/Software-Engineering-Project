@@ -75,6 +75,22 @@ const TextArea = styled.textarea`
   }
 `
 
+const Select = styled.select`
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.625rem 0.75rem;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.9rem;
+  background: #ffffff;
+  cursor: pointer;
+
+  &:focus {
+    outline: none;
+    border-color: #111827;
+    box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.1);
+  }
+`
+
 const FormActions = styled.div`
   display: flex;
   gap: 0.75rem;
@@ -165,10 +181,12 @@ export function TaskFormModal({
                 content: `
 Generate a task in STRICT JSON format:
 Due date format MUST be YYYY-MM-DD (e.g., "2026-04-25"). If due date is not clear, leave it empty.
+Priority MUST be one of: "Low", "Medium", "High". Default to "Medium".
 {
   "title": "",
   "description": "",
-  "due": ""
+  "due": "",
+  "priority": "Medium"
 }
 
 User prompt: ${prompt}
@@ -197,6 +215,7 @@ Return ONLY valid JSON. No commentary.
         title: parsed.title || "",
         description: parsed.description || "",
         due: parsed.due || "",
+        priority: parsed.priority || "Medium",
       });
 
     } catch (err) {
@@ -244,7 +263,18 @@ Return ONLY valid JSON. No commentary.
               placeholder="e.g., 2027-04-25, 00:00"
             />
           </FormGroup>
-
+          <FormGroup>
+            <Label htmlFor="priority">Priority</Label>
+            <Select
+              id="priority"
+              value={formData.priority || 'Medium'}
+              onChange={(e) => onFormDataChange({ ...formData, priority: e.target.value as 'Low' | 'Medium' | 'High' })}
+            >
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </Select>
+          </FormGroup>
           {/* AI PROMPT SECTION */}
           <FormGroup>
             <Label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
