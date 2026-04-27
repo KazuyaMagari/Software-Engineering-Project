@@ -210,7 +210,7 @@ Priority MUST be one of: "Low", "Medium", "High". Default to "Medium".
 
 User prompt: ${prompt}
 
-Return ONLY valid JSON.
+Return ONLY valid JSON. No commentary.
                 `,
               },
             ],
@@ -287,7 +287,7 @@ Return ONLY valid JSON.
               type="text"
               value={formData.due || ''}
               onChange={(e) => onFormDataChange({ ...formData, due: e.target.value })}
-              placeholder="e.g., 2027-04-25"
+              placeholder="e.g., 2027-04-25, 00:00"
             />
           </FormGroup>
 
