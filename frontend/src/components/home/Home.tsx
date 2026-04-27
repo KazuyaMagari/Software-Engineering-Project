@@ -122,24 +122,9 @@ const BtnGhost = styled(Btn)`
   background: #ffffff;
 `
 
-const HeroHighlight = styled.div`
-  border: 1px solid #e5e7eb;
-  background: #f9fafb;
-  border-radius: 10px;
-  padding: 1rem;
-  align-self: center;
-`
-
 const Label = styled.p`
   margin: 0;
   color: #6b7280;
-`
-
-const Number = styled.p`
-  margin: 0.3rem 0 0.1rem;
-  font-size: clamp(1.8rem, 4vw, 2.4rem);
-  font-weight: 700;
-  color: #111827;
 `
 
 const OverviewGrid = styled.section`
@@ -263,12 +248,6 @@ const StatusTag = styled(Tag)`
 const PanelCopy = styled.p`
   margin: 0.6rem 0 1rem;
   color: #4b5563;
-`
-
-
-const FullButton = styled(BtnPrimary)`
-  margin-top: 0.9rem;
-  width: 100%;
 `
 
 function Home() {
@@ -425,14 +404,11 @@ function Home() {
               <BtnPrimary type="button" onClick={handleAddTask}>
                 Create Task
               </BtnPrimary>
-              <BtnGhost type="button">View Reports</BtnGhost>
+              <BtnGhost type="button" onClick={() => window.location.href = '/dashboard'}>
+                View Dashboard
+              </BtnGhost>
             </HeroActions>
           </HeroCopy>
-          <HeroHighlight role="status" aria-live="polite">
-            <Label>Weekly Completion</Label>
-            <Number>82%</Number>
-            <Label>+9% compared to last week</Label>
-          </HeroHighlight>
         </HeroPanel>
 
         <OverviewGrid aria-label="Project overview">
@@ -457,7 +433,7 @@ function Home() {
           <Panel aria-labelledby="my-tasks-title">
             <PanelHeader>
               <h2 id="my-tasks-title">My Tasks</h2>
-              <PanelLink href="#">See all</PanelLink>
+              <PanelLink href="/task">See all</PanelLink>
             </PanelHeader>
             {loading ? (
               <PanelCopy>Loading tasks...</PanelCopy>
@@ -479,14 +455,6 @@ function Home() {
                 ))}
               </TaskList>
             )}
-          </Panel>
-
-          <Panel aria-labelledby="ai-title">
-            <h2 id="ai-title">AI Assistant</h2>
-            <PanelCopy>
-              Smart planning suggestions are available. Ask for workload balancing, overdue risk prediction, and next best actions.
-            </PanelCopy>
-            <FullButton type="button">Apply Suggestion</FullButton>
           </Panel>
         </ContentGrid>
       </Main>

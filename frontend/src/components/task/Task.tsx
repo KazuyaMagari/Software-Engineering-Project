@@ -9,55 +9,6 @@ import { useTaskForm } from '../../hooks/useTaskForm'
 import { auth } from '../../auth/Auth'
 import type { Task as TaskType, TaskPriority, TaskStatus } from '../../types/type'
 
-// Mock data
-const initialMockTasks: TaskType[] = [
-  {
-    id: '1',
-    title: 'API Integration: Task Comments',
-    description: 'Integrate task comments API endpoint',
-    due: 'Today 18:00',
-    priority: 'High',
-    status: 'Open',
-    createdAt: '2026-03-20',
-  },
-  {
-    id: '2',
-    title: 'Sprint Planning Notes',
-    description: 'Document sprint planning decisions',
-    due: 'Tomorrow 10:00',
-    priority: 'Medium',
-    status: 'In progress',
-    createdAt: '2026-03-20',
-  },
-  {
-    id: '3',
-    title: 'UI Fix: Mobile Navbar',
-    description: 'Fix responsive design issues',
-    due: 'Mar 24',
-    priority: 'Low',
-    status: 'Review',
-    createdAt: '2026-03-18',
-  },
-  {
-    id: '4',
-    title: 'Database Schema Update',
-    description: 'Update schema for new features',
-    due: 'Mar 22',
-    priority: 'High',
-    status: 'Open',
-    createdAt: '2026-03-19',
-  },
-  {
-    id: '5',
-    title: 'Documentation Update',
-    description: 'Update API documentation',
-    due: 'Mar 25',
-    priority: 'Low',
-    status: 'Completed',
-    createdAt: '2026-03-17',
-  },
-]
-
 const BOARD_COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: 'Open', label: 'Open' },
   { status: 'In progress', label: 'In Progress' },
@@ -267,7 +218,7 @@ function Task() {
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null)
   
-  const { formMode, formData, setFormData, handleAddTask, handleEditTask, handleCancel, handleSaveTask } = useTaskForm()
+  const { formMode, editingId, formData, setFormData, handleAddTask, handleEditTask, handleCancel, handleSaveTask } = useTaskForm()
 
   // Fetch tasks from backend on component mount
   useEffect(() => {
@@ -279,7 +230,7 @@ function Task() {
           return;
         }
 
-        console.log('User logged in:', user.email);
+        console.log('User logged in');
 
         const response = await fetch(
           `http://localhost:3000/api/tasks?email=${encodeURIComponent(user.email)}`
@@ -298,7 +249,7 @@ function Task() {
             createdAt: task.created_at?.split('T')[0] || '',
           }));
           setTasks(formattedTasks);
-          console.log('✅ Tasks loaded:', formattedTasks);
+          console.log('Tasks loaded:', formattedTasks);
         }
       } catch (error) {
         console.error('Error fetching tasks:', error);
@@ -324,13 +275,39 @@ function Task() {
     return grouped
   }, [tasks])
 
-  const handleDeleteTask = (id: string) => {
-    setTasks(tasks.filter((task) => task.id !== id))
+  const handleDeleteTask = async (id: string) => {
+    // Optimistically update UI
+    const updatedTasks = tasks.filter((task) => task.id !== id)
+    setTasks(updatedTasks)
+
+    try {
+      // Call backend API to delete the task
+      const response = await fetch('http://localhost:3000/api/tasks', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: id }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete task')
+      }
+
+      console.log('Task deleted from database')
+    } catch (error) {
+      console.error('Error deleting task:', error)
+      // Revert UI if API call fails
+      setTasks(tasks)
+      alert('Failed to delete task. Please try again.')
+    }
   }
 
   const handleSaveTaskForm = async (e: React.FormEvent) => {
     const result = handleSaveTask(e, tasks)
-    if (result.success && result.newTask && auth.currentUser?.email) {
+    
+    if (!result.success) return
+
+    if (formMode === 'add' && result.newTask && auth.currentUser?.email) {
+      // Handle Add mode
       try {
         // Format due date to YYYY-MM-DD if needed
         let dueDate = result.newTask.due || null;
@@ -359,7 +336,7 @@ function Task() {
         });
 
         if (response.ok) {
-          console.log('✅ Task created and saved to database');
+          console.log('Task created and saved to database');
           setTasks(result.tasks);
         } else {
           const error = await response.json();
@@ -369,6 +346,47 @@ function Task() {
       } catch (error) {
         console.error('Error saving task:', error);
         alert('Error saving task. Please check backend connection.');
+      }
+    } else if (formMode === 'edit' && editingId) {
+      // Handle Edit mode
+      try {
+        // Format due date to YYYY-MM-DD if needed
+        let dueDate = formData.due || null;
+        if (dueDate) {
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+            const dateObj = new Date(dueDate);
+            if (!isNaN(dateObj.getTime())) {
+              dueDate = dateObj.toISOString().split('T')[0];
+            } else {
+              dueDate = null;
+            }
+          }
+        }
+
+        const response = await fetch('http://localhost:3000/api/tasks', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskId: editingId,
+            title: formData.title,
+            description: formData.description,
+            priority: formData.priority,
+            status: formData.status,
+            due_date: dueDate,
+          }),
+        });
+
+        if (response.ok) {
+          console.log('Task updated and saved to database');
+          setTasks(result.tasks);
+        } else {
+          const error = await response.json();
+          console.error('Failed to update task:', error);
+          alert('Failed to update task. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error updating task:', error);
+        alert('Error updating task. Please check backend connection.');
       }
     }
   }
@@ -399,15 +417,46 @@ function Task() {
     }
   }
 
-  const handleDrop = (e: React.DragEvent, targetStatus: TaskStatus) => {
+  const handleDrop = async (e: React.DragEvent, targetStatus: TaskStatus) => {
     e.preventDefault()
 
     if (draggedTaskId) {
-      setTasks(
-        tasks.map((task) =>
-          task.id === draggedTaskId ? { ...task, status: targetStatus } : task,
-        ),
+      // Find the task being dragged
+      const draggedTask = tasks.find(task => task.id === draggedTaskId)
+      if (!draggedTask || draggedTask.status === targetStatus) {
+        setDraggedTaskId(null)
+        setDragOverColumn(null)
+        return
+      }
+
+      // Optimistically update UI
+      const updatedTasks = tasks.map((task) =>
+        task.id === draggedTaskId ? { ...task, status: targetStatus } : task,
       )
+      setTasks(updatedTasks)
+
+      try {
+        // Call backend API to persist the status change
+        const response = await fetch('http://localhost:3000/api/tasks/status', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskId: draggedTaskId,
+            status: targetStatus,
+          }),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to update task status')
+        }
+
+        console.log('Task status updated in database')
+      } catch (error) {
+        console.error('Error updating task status:', error)
+        // Revert UI if API call fails
+        setTasks(tasks)
+        alert('Failed to update task status. Please try again.')
+      }
     }
 
     setDraggedTaskId(null)
