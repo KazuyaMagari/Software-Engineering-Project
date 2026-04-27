@@ -107,6 +107,36 @@ export class TaskController {
   }
 
   /**
+   * Update a task (all fields)
+   */
+  static async updateTask(req: Request, res: Response): Promise<Response> {
+    try {
+      const { taskId, title, description, priority, status, due_date } = req.body;
+
+      if (!taskId || !title) {
+        return res.status(400).json({ error: 'Task ID and title are required' });
+      }
+
+      const task = await Task.update(taskId, {
+        title,
+        description,
+        priority,
+        status,
+        due_date,
+      });
+
+      return res.json({
+        success: true,
+        message: 'Task updated',
+        task,
+      });
+    } catch (error) {
+      console.error('Error in updateTask:', error);
+      return res.status(500).json({ error: 'Failed to update task' });
+    }
+  }
+
+  /**
    * Delete a task
    */
   static async deleteTask(req: Request, res: Response): Promise<Response> {
