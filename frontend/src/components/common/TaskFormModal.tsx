@@ -1,6 +1,9 @@
+/* Imports */
 import styled from 'styled-components'
 import type { Task as TaskType} from '../../types/type'
 import { useState, useEffect } from 'react'
+
+/* Style */
 
 const ModalOverlay = styled.div<{ $isOpen: boolean }>`
   display: ${(props) => (props.$isOpen ? 'flex' : 'none')};
@@ -126,6 +129,8 @@ const BtnPrimary = styled(Btn)`
   }
 `
 
+/* Props */
+
 interface TaskFormModalProps {
   isOpen: boolean
   mode: 'add' | 'edit' | null
@@ -134,6 +139,8 @@ interface TaskFormModalProps {
   onSave: (e: React.FormEvent) => void
   onCancel: () => void
 }
+
+/* Components*/
 
 export function TaskFormModal({
   isOpen,
@@ -144,11 +151,22 @@ export function TaskFormModal({
   onCancel,
 }: TaskFormModalProps) {
 
+  /* State */
+
+  // AI prompt
   const [prompt, setPrompt] = useState<string>("");
+
+  // Loading animation
   const [loading, setLoading] = useState(false);
   const [loadingDots, setLoadingDots] = useState(".");
 
-  // Loading animation loop
+  /* Attachments */
+  const [attachments, setAttachments] = useState<File[]>([]);
+
+  /* Tags (space-separated) */
+  const [tags, setTags] = useState<string>("");
+
+  /* Loading Dot effect for the Ai generation */
   useEffect(() => {
     if (!loading) return;
 
@@ -159,6 +177,7 @@ export function TaskFormModal({
     return () => clearInterval(interval);
   }, [loading]);
 
+  /* Ai Generator */
   async function handleGenerate() {
     if (!prompt.trim()) return;
 
@@ -191,14 +210,14 @@ Priority MUST be one of: "Low", "Medium", "High". Default to "Medium".
 
 User prompt: ${prompt}
 
-Return ONLY valid JSON. No commentary.
+Return ONLY valid JSON.
                 `,
               },
             ],
           }),
         }
       );
-
+// Tags/Attachments are not needed to be generated as they are optional.
       const result = await response.json();
       const text = result?.choices?.[0]?.message?.content || "";
 
@@ -225,12 +244,18 @@ Return ONLY valid JSON. No commentary.
     }
   }
 
+  /* Render */
+
   return (
     <ModalOverlay $isOpen={isOpen} onClick={() => isOpen && onCancel()}>
       <Modal onClick={(e) => e.stopPropagation()}>
+
+        {/* Title */}
         <ModalTitle>{mode === 'add' ? 'Add New Task' : 'Edit Task'}</ModalTitle>
 
         <form onSubmit={onSave}>
+
+          {/* Task Name */}
           <FormGroup>
             <Label htmlFor="title">Task Name *</Label>
             <Input
@@ -243,6 +268,7 @@ Return ONLY valid JSON. No commentary.
             />
           </FormGroup>
 
+          {/* Description */}
           <FormGroup>
             <Label htmlFor="description">Description</Label>
             <TextArea
@@ -253,6 +279,7 @@ Return ONLY valid JSON. No commentary.
             />
           </FormGroup>
 
+          {/* Due Date */}
           <FormGroup>
             <Label htmlFor="due">Due Date</Label>
             <Input
@@ -260,9 +287,11 @@ Return ONLY valid JSON. No commentary.
               type="text"
               value={formData.due || ''}
               onChange={(e) => onFormDataChange({ ...formData, due: e.target.value })}
-              placeholder="e.g., 2027-04-25, 00:00"
+              placeholder="e.g., 2027-04-25"
             />
           </FormGroup>
+
+          {/* Priority */}
           <FormGroup>
             <Label htmlFor="priority">Priority</Label>
             <Select
@@ -275,7 +304,55 @@ Return ONLY valid JSON. No commentary.
               <option value="High">High</option>
             </Select>
           </FormGroup>
-          {/* AI PROMPT SECTION */}
+
+          {/* Attachments */}
+          <FormGroup>
+            <Label>Attachments</Label>
+
+            <Input
+              type="file"
+              multiple
+              onChange={(e) => {
+                if (!e.target.files) return;
+                const files = Array.from(e.target.files);
+
+                setAttachments(files);
+
+                onFormDataChange({
+                  ...formData,
+                  attachments: files.map(f => f.name),
+                });
+              }}
+            />
+
+            {attachments.length > 0 && (
+              <div style={{ fontSize: "0.85rem", color: "#4b5563" }}>
+                {attachments.length} file(s) selected
+              </div>
+            )}
+          </FormGroup>
+
+          {/* Tags */}
+          <FormGroup>
+            <Label>Tags (space-separated)</Label>
+            <Input
+              type="text"
+              value={tags}
+              onChange={(e) => {
+                setTags(e.target.value);
+
+                const tagArray = e.target.value.trim().split(/\s+/);
+
+                onFormDataChange({
+                  ...formData,
+                  tags: tagArray,
+                });
+              }}
+              placeholder="e.g. work urgent frontend"
+            />
+          </FormGroup>
+
+          {/* Ai Prompt */}
           <FormGroup>
             <Label style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <img
@@ -310,12 +387,14 @@ Return ONLY valid JSON. No commentary.
             </div>
           </FormGroup>
 
+          {/* Save/Cancel Buttons */}
           <FormActions>
             <Btn type="button" onClick={onCancel}>
               Cancel
             </Btn>
             <BtnPrimary type="submit">Save</BtnPrimary>
           </FormActions>
+
         </form>
       </Modal>
     </ModalOverlay>
