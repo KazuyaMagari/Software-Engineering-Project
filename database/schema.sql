@@ -3,7 +3,7 @@
 -- 1. USERS TABLE
 -- ============================================================================
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email VARCHAR(255) UNIQUE NOT NULL,
   auth0_id VARCHAR(255) UNIQUE NOT NULL,
@@ -12,14 +12,14 @@ CREATE TABLE users (
   last_login TIMESTAMP
 );
 
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_auth0_id ON users(auth0_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_auth0_id ON users(auth0_id);
 
 -- ============================================================================
 -- 2. TASKS TABLE
 -- ============================================================================
 
-CREATE TABLE tasks (
+CREATE TABLE IF NOT EXISTS tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   creator_id UUID NOT NULL,
   title VARCHAR(500) NOT NULL,
@@ -36,11 +36,26 @@ CREATE TABLE tasks (
   CHECK (priority IN ('Low', 'Medium', 'High'))
 );
 
-CREATE INDEX idx_tasks_creator_id ON tasks(creator_id);
-CREATE INDEX idx_tasks_status ON tasks(status);
-CREATE INDEX idx_tasks_due_date ON tasks(due_date);
-CREATE INDEX idx_tasks_created_at ON tasks(created_at DESC);
-CREATE INDEX idx_tasks_title_search ON tasks USING GIN(to_tsvector('english', title));
+CREATE INDEX IF NOT EXISTS idx_tasks_creator_id ON tasks(creator_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tasks_title_search ON tasks USING GIN(to_tsvector('english', title));
+
+-- ============================================================================
+-- 3. TASK SHARES TABLE
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS task_shares (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  shared_with_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  shared_by_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  permission VARCHAR(50) DEFAULT 'view' CHECK (permission IN ('view', 'edit')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(task_id, shared_with_id)
+);
 
 -- ============================================================================
 -- SAMPLE DATA (for testing/development - remove in production)
@@ -80,14 +95,23 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger for users table
+DROP TRIGGER IF EXISTS update_users_timestamp ON users;
 CREATE TRIGGER update_users_timestamp
 BEFORE UPDATE ON users
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
 -- Trigger for tasks table
+DROP TRIGGER IF EXISTS update_tasks_timestamp ON tasks;
 CREATE TRIGGER update_tasks_timestamp
 BEFORE UPDATE ON tasks
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+-- Trigger for task_shares table
+DROP TRIGGER IF EXISTS update_task_shares_timestamp ON task_shares;
+CREATE TRIGGER update_task_shares_timestamp
+BEFORE UPDATE ON task_shares
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 

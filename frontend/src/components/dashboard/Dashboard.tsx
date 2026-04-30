@@ -90,19 +90,19 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    if (!user?.email) return
+    if (!user) return
 
     const fetchData = async () => {
       const [s, priority] = await Promise.all([
-        getTaskStats(user.email),
-        getPriorityBreakdown(user.email)
+        getTaskStats(),
+        getPriorityBreakdown()
       ])
       if (s) setStats(s)
       if (priority) setPriorityData(priority)
     }
 
     fetchData()
-  }, [user?.email])
+  }, [user])
 
   if (!user) {
     return (

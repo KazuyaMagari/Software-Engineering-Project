@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react'
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+import { analyticsAPI } from '../services/api'
 
 export interface TaskStats {
   total: number
@@ -64,12 +63,10 @@ export function useAnalytics() {
     }
   }
 
-  const getTaskStats = async (email: string): Promise<TaskStats | null> => {
+  const getTaskStats = async (): Promise<TaskStats | null> => {
     try {
       setLoadingState(true)
-      const res = await fetch(`${API_BASE_URL}/analytics/stats?email=${email}`)
-      if (!res.ok) throw new Error('Failed to fetch stats')
-      const data = await res.json()
+      const data = await analyticsAPI.getTaskStats()
       setError(null)
       return data
     } catch (err) {
@@ -80,12 +77,10 @@ export function useAnalytics() {
     }
   }
 
-  const getStatusBreakdown = async (email: string): Promise<StatusBreakdown[] | null> => {
+  const getStatusBreakdown = async (): Promise<StatusBreakdown[] | null> => {
     try {
       setLoadingState(true)
-      const res = await fetch(`${API_BASE_URL}/analytics/status-breakdown?email=${email}`)
-      if (!res.ok) throw new Error('Failed to fetch breakdown')
-      const data = await res.json()
+      const data = await analyticsAPI.getStatusBreakdown()
       setError(null)
       return data
     } catch (err) {
@@ -96,12 +91,10 @@ export function useAnalytics() {
     }
   }
 
-  const getPriorityBreakdown = async (email: string): Promise<PriorityBreakdown[] | null> => {
+  const getPriorityBreakdown = async (): Promise<PriorityBreakdown[] | null> => {
     try {
       setLoadingState(true)
-      const res = await fetch(`${API_BASE_URL}/analytics/priority-breakdown?email=${email}`)
-      if (!res.ok) throw new Error('Failed to fetch breakdown')
-      const data = await res.json()
+      const data = await analyticsAPI.getPriorityBreakdown()
       setError(null)
       return data
     } catch (err) {
@@ -112,12 +105,10 @@ export function useAnalytics() {
     }
   }
 
-  const getCompletionTrends = async (email: string, days: number = 30): Promise<CompletionTrend[] | null> => {
+  const getCompletionTrends = async (days: number = 30): Promise<CompletionTrend[] | null> => {
     try {
       setLoadingState(true)
-      const res = await fetch(`${API_BASE_URL}/analytics/completion-trends?email=${email}&days=${days}`)
-      if (!res.ok) throw new Error('Failed to fetch trends')
-      const data = await res.json()
+      const data = await analyticsAPI.getCompletionTrends(days)
       setError(null)
       return data
     } catch (err) {
@@ -128,12 +119,10 @@ export function useAnalytics() {
     }
   }
 
-  const getPerformanceMetrics = async (email: string): Promise<PerformanceMetrics | null> => {
+  const getPerformanceMetrics = async (): Promise<PerformanceMetrics | null> => {
     try {
       setLoadingState(true)
-      const res = await fetch(`${API_BASE_URL}/analytics/performance-metrics?email=${email}`)
-      if (!res.ok) throw new Error('Failed to fetch metrics')
-      const data = await res.json()
+      const data = await analyticsAPI.getPerformanceMetrics()
       setError(null)
       return data
     } catch (err) {
@@ -147,9 +136,7 @@ export function useAnalytics() {
   const getTeamPerformance = async (): Promise<TeamMember[] | null> => {
     try {
       setLoadingState(true)
-      const res = await fetch(`${API_BASE_URL}/analytics/team-performance`)
-      if (!res.ok) throw new Error('Failed to fetch team data')
-      const data = await res.json()
+      const data = await analyticsAPI.getTeamPerformance()
       setError(null)
       return data
     } catch (err) {

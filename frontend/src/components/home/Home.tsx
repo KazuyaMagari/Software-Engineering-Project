@@ -3,7 +3,9 @@ import { onAuthStateChanged } from 'firebase/auth'
 import Navbar from './Navbar'
 import Footer from './Footert'
 import { TaskFormModal } from '../common/TaskFormModal'
+import { ShareModal } from '../common/ShareModal'
 import { useTaskForm } from '../../hooks/useTaskForm'
+import { taskAPI, authAPI } from '../../services/api'
 import { auth } from '../../auth/Auth'
 import styled from 'styled-components'
 import type { Task as TaskType } from '../../types/type'
@@ -254,6 +256,7 @@ function Home() {
   const [myTasks, setMyTasks] = useState<TaskType[]>([])
   const [stats, setStats] = useState({ completed: 0, onTrack: 0, overdue: 0 })
   const [loading, setLoading] = useState(true)
+  const [shareTaskId, setShareTaskId] = useState<string | null>(null)
   const {
     formMode,
     formData,
@@ -269,8 +272,16 @@ function Home() {
       if (user?.email) {
         try {
           setLoading(true)
-          const response = await fetch(`http://localhost:3000/api/tasks?email=${user.email}`)
-          const data = await response.json()
+          
+          // Register user first (ensures they're in database)
+          try {
+            await authAPI.registerUser()
+          } catch (registerError) {
+            console.error('Registration error:', registerError)
+          }
+          
+          // Fetch tasks using authenticated API (includes shared tasks)
+          const data = await taskAPI.getAccessibleTasks()
 
           if (data.success && data.tasks && Array.isArray(data.tasks)) {
             // Transform tasks to match TaskType (convert DB format to UI format)
@@ -282,6 +293,9 @@ function Home() {
               status: task.status,
               description: task.description || '',
               createdAt: task.created_at,
+              creator_id: task.creator_id,
+              creator_email: task.creator_email,
+              access_permission: task.access_permission,
             }))
 
             setMyTasks(transformedTasks)
@@ -330,22 +344,16 @@ function Home() {
           dueDate = null; // Convert relative dates back to null for backend
         }
 
-        // Send to backend
-        const response = await fetch('http://localhost:3000/api/tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: auth.currentUser.email,
-            title: result.newTask.title,
-            description: result.newTask.description,
-            priority: result.newTask.priority,
-            status: result.newTask.status,
-            due_date: dueDate,
-          }),
+        // Send to backend using authenticated API
+        const taskResponse = await taskAPI.createTask({
+          title: result.newTask.title,
+          description: result.newTask.description,
+          priority: result.newTask.priority,
+          status: result.newTask.status,
+          due_date: dueDate,
         });
 
-        if (response.ok) {
-          const taskResponse = await response.json();
+        if (taskResponse) {
           console.log('✅ Task created successfully in database');
           
           // Add the new task from backend response to local state
@@ -358,6 +366,9 @@ function Home() {
               status: taskResponse.task.status,
               description: taskResponse.task.description || '',
               createdAt: taskResponse.task.created_at,
+              creator_id: taskResponse.task.creator_id,
+              creator_email: taskResponse.task.creator_email,
+              access_permission: taskResponse.task.access_permission || 'owner',
             }
             setMyTasks([newTask, ...myTasks])
             
@@ -367,14 +378,10 @@ function Home() {
             const overdue = (newTask.status === 'Overdue' ? 1 : 0) + stats.overdue
             setStats({ completed, onTrack, overdue })
           }
-        } else {
-          const error = await response.json();
-          console.error('Failed to save task:', error);
-          alert('Failed to save task. Please try again.');
         }
       } catch (error) {
-        console.error('Error saving task:', error);
-        alert('Error saving task. Please check backend connection.');
+        console.error('Failed to save task:', error);
+        alert('Failed to save task. Please try again.');
       }
     }
   }
@@ -450,6 +457,11 @@ function Home() {
                     <TaskTags>
                       <Tag>{task.priority}</Tag>
                       <StatusTag>{task.status}</StatusTag>
+                      {task.access_permission === 'owner' && (
+                        <button onClick={() => setShareTaskId(task.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }} title="Share">
+                          🔗
+                        </button>
+                      )}
                     </TaskTags>
                   </TaskItem>
                 ))}
@@ -468,6 +480,17 @@ function Home() {
         onSave={handleSaveTaskForm}
         onCancel={handleCancel}
       />
+
+      {/* Share Modal */}
+      {shareTaskId && (
+        <ShareModal
+          taskId={shareTaskId}
+          onClose={() => setShareTaskId(null)}
+          onShareSuccess={() => {
+            setShareTaskId(null)
+          }}
+        />
+      )}
 
       <Footer />
     </Page>
