@@ -14,45 +14,27 @@ export class Analytics {
         COUNT(CASE WHEN status = 'Review' THEN 1 END) as review,
         COUNT(CASE WHEN status = 'Overdue' THEN 1 END) as overdue,
         ROUND(100.0 * COUNT(CASE WHEN status = 'Completed' THEN 1 END) / NULLIF(COUNT(*), 0), 1) as completion_rate
-      FROM tasks
-      WHERE creator_id = $1
-      UNION ALL
-      SELECT 
-        COUNT(*) as total,
-        COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed,
-        COUNT(CASE WHEN status = 'In progress' THEN 1 END) as in_progress,
-        COUNT(CASE WHEN status = 'Open' THEN 1 END) as open,
-        COUNT(CASE WHEN status = 'Review' THEN 1 END) as review,
-        COUNT(CASE WHEN status = 'Overdue' THEN 1 END) as overdue,
-        ROUND(100.0 * COUNT(CASE WHEN status = 'Completed' THEN 1 END) / NULLIF(COUNT(*), 0), 1) as completion_rate
-      FROM tasks t
-      INNER JOIN task_shares ts ON t.id = ts.task_id
-      WHERE ts.shared_with_id = $1
+      FROM (
+        SELECT status FROM tasks WHERE creator_id = $1
+        UNION ALL
+        SELECT t.status FROM tasks t
+        INNER JOIN task_shares ts ON t.id = ts.task_id
+        WHERE ts.shared_with_id = $1
+      ) combined
     `
     const result = await pool.query(query, [userId])
     
-    // Combine owned and shared tasks stats
-    if (result.rows.length >= 2) {
-      const owned = result.rows[0]
-      const shared = result.rows[1]
-      return {
-        total: (owned.total || 0) + (shared.total || 0),
-        completed: (owned.completed || 0) + (shared.completed || 0),
-        in_progress: (owned.in_progress || 0) + (shared.in_progress || 0),
-        open: (owned.open || 0) + (shared.open || 0),
-        review: (owned.review || 0) + (shared.review || 0),
-        overdue: (owned.overdue || 0) + (shared.overdue || 0),
-        completion_rate: 0, // Calculate below
-      }
-    }
-    
     const stats = result.rows[0] || { total: 0, completed: 0, in_progress: 0, open: 0, review: 0, overdue: 0 }
-    if (stats.total > 0) {
-      stats.completion_rate = Math.round((stats.completed / stats.total) * 1000) / 10
-    } else {
-      stats.completion_rate = 0
+    
+    return {
+      total: Number(stats.total || 0),
+      completed: Number(stats.completed || 0),
+      in_progress: Number(stats.in_progress || 0),
+      open: Number(stats.open || 0),
+      review: Number(stats.review || 0),
+      overdue: Number(stats.overdue || 0),
+      completion_rate: Number(stats.completion_rate || 0)
     }
-    return stats
   }
 
   /**
