@@ -5,8 +5,10 @@ import { onAuthStateChanged } from 'firebase/auth'
 import Navbar from '../home/Navbar'
 import Footer from '../home/Footert'
 import { TaskFormModal } from '../common/TaskFormModal'
+import { ShareModal } from '../common/ShareModal'
 import { useTaskForm } from '../../hooks/useTaskForm'
 import { auth } from '../../auth/Auth'
+import { taskAPI } from '../../services/api'
 import type { Task as TaskType, TaskPriority, TaskStatus } from '../../types/type'
 
 const BOARD_COLUMNS: { status: TaskStatus; label: string }[] = [
@@ -112,7 +114,7 @@ const TasksContainer = styled.div<{ $isDragOver: boolean }>`
   transition: background-color 0.2s ease;
 `
 
-const TaskCard = styled.div<{ priority: TaskPriority; $isDragging: boolean }>`
+const TaskCard = styled.div<{ priority: TaskPriority; $isDragging: boolean; $isViewOnly?: boolean }>`
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-left: 4px solid
@@ -122,14 +124,14 @@ const TaskCard = styled.div<{ priority: TaskPriority; $isDragging: boolean }>`
     }};
   border-radius: 8px;
   padding: 1rem;
-  cursor: grab;
+  cursor: ${(props) => (props.$isViewOnly ? 'default' : 'grab')};
   transition: all 0.2s ease;
   opacity: ${(props) => (props.$isDragging ? 0.5 : 1)};
   box-shadow: ${(props) =>
     props.$isDragging ? '0 10px 15px rgba(0, 0, 0, 0.15)' : '0 1px 3px rgba(0, 0, 0, 0.05)'};
 
   &:active {
-    cursor: grabbing;
+    cursor: ${(props) => (props.$isViewOnly ? 'default' : 'grabbing')};
   }
 
   &:hover {
@@ -151,6 +153,25 @@ const TaskDescription = styled.p`
   font-size: 0.85rem;
   color: #6b7280;
   word-break: break-word;
+`
+
+const TaskCreator = styled.p`
+  margin: 0 0 0.5rem 0;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-style: italic;
+`
+
+const TaskPermission = styled.span`
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-right: 0.5rem;
+  background: #eef2ff;
+  color: #4338ca;
 `
 
 const TaskFooter = styled.div`
@@ -207,8 +228,52 @@ const BtnPrimary = styled(Btn)`
   color: #fff;
   border-color: #111827;
 
+  &:hover {\n    background: #1f2937;
+  }
+`
+
+const SearchContainer = styled.div`
+  max-width: 1400px;
+  margin: 0 auto 1.5rem;
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+  }
+`
+
+const SearchInput = styled.input`
+  flex: 1;
+  min-width: 250px;
+  padding: 0.6rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: 'Outfit', sans-serif;
+  
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+`
+
+const ClearBtn = styled.button`
+  padding: 0.6rem 1rem;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+
   &:hover {
-    background: #1f2937;
+    background: #e5e7eb;
   }
 `
 
@@ -217,6 +282,8 @@ function Task() {
   const [loading, setLoading] = useState(true)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<TaskStatus | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [shareTaskId, setShareTaskId] = useState<string | null>(null)
   
   const { formMode, editingId, formData, setFormData, handleAddTask, handleEditTask, handleCancel, handleSaveTask } = useTaskForm()
 
@@ -224,42 +291,63 @@ function Task() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
-        if (!user?.email) {
+        if (!user) {
           console.log('No user logged in');
+          setTasks([]);
           setLoading(false);
           return;
         }
 
-        console.log('User logged in');
-
-        const response = await fetch(
-          `http://localhost:3000/api/tasks?email=${encodeURIComponent(user.email)}`
-        );
-        const data = await response.json();
-
-        if (data.success) {
-          // Format data from API to match TaskType
-          const formattedTasks = data.tasks.map((task: any) => ({
-            id: task.id,
-            title: task.title,
-            description: task.description,
-            due: task.due_date || '',
-            priority: task.priority,
-            status: task.status,
-            createdAt: task.created_at?.split('T')[0] || '',
-          }));
-          setTasks(formattedTasks);
-          console.log('Tasks loaded:', formattedTasks);
-        }
+        console.log('User logged in:', user.email)
+        await fetchTasks('');
       } catch (error) {
         console.error('Error fetching tasks:', error);
-      } finally {
         setLoading(false);
       }
     });
 
     return () => unsubscribe();
   }, []);
+
+  const fetchTasks = async (search: string) => {
+    try {
+      setLoading(true);
+      const data = await taskAPI.getAccessibleTasks(search || undefined);
+
+      if (data.success) {
+        // Format data from API to match TaskType
+        const formattedTasks = data.tasks.map((task: any) => ({
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          due: task.due_date || '',
+          priority: task.priority,
+          status: task.status,
+          createdAt: task.created_at?.split('T')[0] || '',
+          creator_id: task.creator_id,
+          creator_email: task.creator_email,
+          access_permission: task.access_permission,
+        }));
+        setTasks(formattedTasks);
+        console.log('Tasks loaded:', formattedTasks);
+      }
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      alert('Failed to load tasks');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = (value: string) => {
+    setSearchTerm(value);
+    fetchTasks(value);
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    fetchTasks('');
+  };
 
   const tasksByStatus = useMemo(() => {
     const grouped: Record<TaskStatus, TaskType[]> = {
@@ -276,28 +364,26 @@ function Task() {
   }, [tasks])
 
   const handleDeleteTask = async (id: string) => {
+    const taskToDelete = tasks.find((task) => task.id === id)
+
+    if (taskToDelete?.access_permission && taskToDelete.access_permission !== 'owner') {
+      alert('タスクの削除は所有者（Owner）のみ可能です。')
+      return
+    }
+
     // Optimistically update UI
     const updatedTasks = tasks.filter((task) => task.id !== id)
     setTasks(updatedTasks)
 
     try {
       // Call backend API to delete the task
-      const response = await fetch('http://localhost:3000/api/tasks', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: id }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to delete task')
-      }
-
+      await taskAPI.deleteTask(id);
       console.log('Task deleted from database')
     } catch (error) {
       console.error('Error deleting task:', error)
       // Revert UI if API call fails
       setTasks(tasks)
-      alert('Failed to delete task. Please try again.')
+      alert(error instanceof Error ? error.message : 'Failed to delete task. Please try again.')
     }
   }
 
@@ -306,41 +392,35 @@ function Task() {
     
     if (!result.success) return
 
-    if (formMode === 'add' && result.newTask && auth.currentUser?.email) {
+    if (formMode === 'add' && result.newTask) {
       // Handle Add mode
       try {
-        // Format due date to YYYY-MM-DD if needed
-        let dueDate = result.newTask.due || null;
-        if (dueDate) {
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
-            const dateObj = new Date(dueDate);
-            if (!isNaN(dateObj.getTime())) {
-              dueDate = dateObj.toISOString().split('T')[0];
-            } else {
-              dueDate = null;
-            }
-          }
-        }
-
-        const response = await fetch('http://localhost:3000/api/tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: auth.currentUser.email,
-            title: result.newTask.title,
-            description: result.newTask.description,
-            priority: result.newTask.priority,
-            status: result.newTask.status,
-            due_date: dueDate,
-          }),
+        const response = await taskAPI.createTask({
+          title: result.newTask.title,
+          description: result.newTask.description || undefined,
+          priority: result.newTask.priority,
+          status: result.newTask.status,
+          due_date: result.newTask.due || undefined,
         });
 
-        if (response.ok) {
+        if (response.success) {
           console.log('Task created and saved to database');
-          setTasks(result.tasks);
+          const createdTask: TaskType = {
+            id: response.task.id,
+            title: response.task.title,
+            description: response.task.description || '',
+            due: response.task.due_date || '',
+            priority: response.task.priority,
+            status: response.task.status,
+            createdAt: response.task.created_at?.split('T')[0] || '',
+            creator_id: response.task.creator_id,
+            creator_email: response.task.creator_email,
+            access_permission: response.task.access_permission || 'owner',
+          }
+          setTasks([createdTask, ...tasks])
+          handleCancel();
         } else {
-          const error = await response.json();
-          console.error('Failed to save task:', error);
+          console.error('Failed to save task:', response);
           alert('Failed to save task. Please try again.');
         }
       } catch (error) {
@@ -350,38 +430,20 @@ function Task() {
     } else if (formMode === 'edit' && editingId) {
       // Handle Edit mode
       try {
-        // Format due date to YYYY-MM-DD if needed
-        let dueDate = formData.due || null;
-        if (dueDate) {
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
-            const dateObj = new Date(dueDate);
-            if (!isNaN(dateObj.getTime())) {
-              dueDate = dateObj.toISOString().split('T')[0];
-            } else {
-              dueDate = null;
-            }
-          }
-        }
-
-        const response = await fetch('http://localhost:3000/api/tasks', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            taskId: editingId,
-            title: formData.title,
-            description: formData.description,
-            priority: formData.priority,
-            status: formData.status,
-            due_date: dueDate,
-          }),
+        const response = await taskAPI.updateTask(editingId, {
+          title: formData.title,
+          description: formData.description || undefined,
+          priority: formData.priority,
+          status: formData.status,
+          due_date: formData.due || undefined,
         });
 
-        if (response.ok) {
+        if (response.success) {
           console.log('Task updated and saved to database');
           setTasks(result.tasks);
+          handleCancel();
         } else {
-          const error = await response.json();
-          console.error('Failed to update task:', error);
+          console.error('Failed to update task:', response);
           alert('Failed to update task. Please try again.');
         }
       } catch (error) {
@@ -437,19 +499,7 @@ function Task() {
 
       try {
         // Call backend API to persist the status change
-        const response = await fetch('http://localhost:3000/api/tasks/status', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            taskId: draggedTaskId,
-            status: targetStatus,
-          }),
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to update task status')
-        }
-
+        await taskAPI.updateTaskStatus(draggedTaskId, targetStatus);
         console.log('Task status updated in database')
       } catch (error) {
         console.error('Error updating task status:', error)
@@ -471,6 +521,19 @@ function Task() {
           <h1>Task Board</h1>
           <BtnPrimary onClick={handleAddTask}>+ New Task</BtnPrimary>
         </Header>
+
+        {/* 🔍 Search Bar */}
+        <SearchContainer>
+          <SearchInput
+            type="text"
+            placeholder="🔍 Search tasks by title or description..."
+            value={searchTerm}
+            onChange={(e) => handleSearch(e.target.value)}
+          />
+          {searchTerm && (
+            <ClearBtn onClick={handleClearSearch}>Clear</ClearBtn>
+          )}
+        </SearchContainer>
 
         {loading ? (
           <div style={{ textAlign: 'center', paddingTop: '2rem', color: '#6b7280' }}>
@@ -501,21 +564,39 @@ function Task() {
                     key={task.id}
                     priority={task.priority}
                     $isDragging={draggedTaskId === task.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, task.id)}
+                    $isViewOnly={task.access_permission === 'view'}
+                    draggable={task.access_permission !== 'view'}
+                    onDragStart={(e) => {
+                      if (task.access_permission !== 'view') handleDragStart(e, task.id)
+                    }}
                     onDragEnd={handleDragEnd}
                   >
                     <TaskTitle>{task.title}</TaskTitle>
                     {task.description && <TaskDescription>{task.description}</TaskDescription>}
+                    {task.creator_email && <TaskCreator>by {task.creator_email}</TaskCreator>}
                     <TaskFooter>
-                      <TaskDueDate>{task.due || '—'}</TaskDueDate>
+                      <TaskDueDate>
+                        {task.access_permission && task.access_permission !== 'owner' ? (
+                          <TaskPermission>{task.access_permission === 'view' ? 'View only' : 'Can edit'}</TaskPermission>
+                        ) : null}
+                        {task.due || '—'}
+                      </TaskDueDate>
                       <TaskActions>
-                        <IconBtn onClick={() => handleEditTask(task)} title="Edit">
-                          ✎
-                        </IconBtn>
-                        <IconBtn onClick={() => handleDeleteTask(task.id)} title="Delete">
-                          ✕
-                        </IconBtn>
+                        {task.access_permission !== 'view' && (
+                          <IconBtn onClick={() => handleEditTask(task)} title="Edit">
+                            ✎
+                          </IconBtn>
+                        )}
+                        {task.access_permission === 'owner' && (
+                          <>
+                            <IconBtn onClick={() => setShareTaskId(task.id)} title="Share">
+                              🔗
+                            </IconBtn>
+                            <IconBtn onClick={() => handleDeleteTask(task.id)} title="Delete">
+                              ✕
+                            </IconBtn>
+                          </>
+                        )}
                       </TaskActions>
                     </TaskFooter>
                   </TaskCard>
@@ -537,6 +618,17 @@ function Task() {
         onSave={handleSaveTaskForm}
         onCancel={handleCancel}
       />
+
+      {shareTaskId && (
+        <ShareModal
+          taskId={shareTaskId}
+          onClose={() => setShareTaskId(null)}
+          onShareSuccess={() => {
+            setShareTaskId(null)
+            fetchTasks(searchTerm)
+          }}
+        />
+      )}
 
       <Footer />
     </Page>

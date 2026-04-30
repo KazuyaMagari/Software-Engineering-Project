@@ -9,6 +9,9 @@ export interface Task {
   priority: TaskPriority
   status: TaskStatus
   createdAt: string
+  creator_id?: string
+  creator_email?: string
+  access_permission?: 'owner' | 'view' | 'edit'
 }
 
 export interface TaskFilter {

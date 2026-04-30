@@ -1,8 +1,9 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, signOut, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import type { User } from "firebase/auth";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
+import { authAPI } from "../services/api";
 
 // Your web app's Firebase configuration (values are provided via Vite env vars)
 const firebaseConfig = {
@@ -48,6 +49,7 @@ export function Auth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const registeredUserIdRef = useRef<string | null>(null);
   const googleProvider = new GoogleAuthProvider();
 
   useEffect(() => {
@@ -59,6 +61,27 @@ export function Auth() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const registerCurrentUser = async () => {
+      if (!user || registeredUserIdRef.current === user.uid) {
+        return;
+      }
+
+      if (!user.email) {
+        return;
+      }
+
+      try {
+        await authAPI.registerUser();
+        registeredUserIdRef.current = user.uid;
+      } catch (registerError) {
+        console.error('Backend user registration failed:', registerError);
+      }
+    };
+
+    registerCurrentUser();
+  }, [user]);
+
   const handleGoogleSignIn = async () => {
     try {
       setError("");
@@ -68,22 +91,19 @@ export function Auth() {
       console.log("✅ Login successful!");
       console.log("User email:", user.email);
 
-      // Register/get user in backend
+      // Register user in backend
       if (user.email) {
         try {
-          const registerResponse = await fetch('http://localhost:3000/api/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: user.email }),
-          });
-          const registerData = await registerResponse.json();
-          console.log("Backend response:", registerData);
+          const registerData = await authAPI.registerUser();
+          console.log("Backend registration response:", registerData);
+          registeredUserIdRef.current = user.uid;
 
-          // Fetch user tasks
-          const tasksResponse = await fetch(
-            `http://localhost:3000/api/tasks?email=${encodeURIComponent(user.email)}`
-          );
-          const tasksData = await tasksResponse.json();
+          // Fetch user's tasks
+          const tasksData = await fetch('http://localhost:3000/api/tasks', {
+            headers: {
+              'Authorization': `Bearer ${await user.getIdToken()}`,
+            },
+          }).then(res => res.json());
           console.log("User tasks:", tasksData);
         } catch (error) {
           console.error("Backend connection error:", error);
