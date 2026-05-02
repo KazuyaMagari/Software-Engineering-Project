@@ -4,6 +4,36 @@ import { User } from '../models/User';
 import { RealtimeService } from '../services/RealtimeService';
 
 export class TaskController {
+  private static buildTaskPayload(task: any, creatorEmail: string, accessPermission: 'owner' | 'view' | 'edit') {
+    return {
+      ...task,
+      owner_id: task.owner_id || task.creator_id,
+      creator_email: creatorEmail,
+      access_permission: accessPermission,
+    };
+  }
+
+  private static async emitTaskToRecipients(
+    event: 'task_updated' | 'task_status_changed' | 'task_deleted',
+    task: any,
+    payloadFactory: (accessPermission: 'owner' | 'view' | 'edit', creatorEmail: string) => any
+  ) {
+    const creator = await User.findById(task.creator_id);
+    const creatorEmail = creator?.email || '';
+    const recipients = await Task.getRealtimeRecipients(task.id);
+
+    recipients.forEach(({ auth0_id, access_permission }) => {
+      const payload = payloadFactory(access_permission, creatorEmail);
+      if (event === 'task_deleted') {
+        RealtimeService.emitTaskDeleted(auth0_id, task.id);
+      } else if (event === 'task_status_changed') {
+        RealtimeService.emitTaskStatusChanged(auth0_id, task.id, task.status);
+      } else {
+        RealtimeService.emitTaskUpdated(auth0_id, payload);
+      }
+    });
+  }
+
   /**
    * Get all tasks for authenticated user with optional search
    */
@@ -108,22 +138,14 @@ export class TaskController {
       );
 
       // Emit real-time event
-      RealtimeService.emitTaskCreated(req.user.uid, {
-        ...task,
-        owner_id: task.creator_id,
-        creator_email: user.email,
-        access_permission: 'owner',
-      });
+      const payload = TaskController.buildTaskPayload(task, user.email, 'owner');
+
+      RealtimeService.emitTaskCreated(user.auth0_id, payload);
 
       return res.json({
         success: true,
         message: 'Task created',
-        task: {
-          ...task,
-          owner_id: task.creator_id,
-          creator_email: user.email,
-          access_permission: 'owner',
-        },
+        task: payload,
       });
     } catch (error) {
       console.error('Error in createTask:', error);
@@ -155,12 +177,18 @@ export class TaskController {
       const task = await Task.updateStatus(taskId, status, user.id);
 
       // Emit real-time event to all users with access to this task
-      RealtimeService.emitTaskStatusChanged(req.user.uid, taskId, status);
+      await TaskController.emitTaskToRecipients('task_status_changed', task, () => task);
+
+      const payload = TaskController.buildTaskPayload(
+        task,
+        (await User.findById(task.creator_id))?.email || user.email,
+        'owner'
+      );
 
       return res.json({
         success: true,
         message: 'Task updated',
-        task,
+        task: payload,
       });
     } catch (error: any) {
       console.error('Error in updateTaskStatus:', error);
@@ -201,12 +229,16 @@ export class TaskController {
       });
 
       // Emit real-time event
-      RealtimeService.emitTaskUpdated(req.user.uid, task);
+      const creatorEmail = (await User.findById(task.creator_id))?.email || user.email;
+      const payload = TaskController.buildTaskPayload(task, creatorEmail, 'owner');
+      await TaskController.emitTaskToRecipients('task_updated', task, (accessPermission, email) =>
+        TaskController.buildTaskPayload(task, email, accessPermission)
+      );
 
       return res.json({
         success: true,
         message: 'Task updated',
-        task,
+        task: payload,
       });
     } catch (error: any) {
       console.error('Error in updateTask:', error);
@@ -251,6 +283,9 @@ export class TaskController {
         });
       }
 
+      const task = await Task.findById(taskId, user.id);
+      const recipients = task ? await Task.getRealtimeRecipients(taskId) : [];
+
       const deleted = await Task.delete(taskId, user.id);
 
       if (!deleted) {
@@ -258,7 +293,13 @@ export class TaskController {
       }
 
       // Emit real-time event
-      RealtimeService.emitTaskDeleted(req.user.uid, taskId);
+      if (task && recipients.length > 0) {
+        const creatorEmail = (await User.findById(task.creator_id))?.email || user.email;
+        recipients.forEach(({ auth0_id, access_permission }) => {
+          TaskController.buildTaskPayload(task, creatorEmail, access_permission);
+          RealtimeService.emitTaskDeleted(auth0_id, taskId);
+        });
+      }
 
       return res.json({
         success: true,
@@ -331,8 +372,9 @@ export class TaskController {
       
       if (recipientUser && task) {
         // Emit real-time event to recipient
-          console.log('[TaskController] Emitting task_shared event to:', recipientUser.auth0_id);
-        RealtimeService.emitTaskShared(recipientUser.auth0_id, task, user.email);
+          console.log('[TaskController] Emitting task_shared event to:', recipientUser.id);
+        const sharedPayload = TaskController.buildTaskPayload(task, user.email, (permission || 'view') as 'view' | 'edit');
+          RealtimeService.emitTaskShared(recipientUser.auth0_id, sharedPayload, user.email);
       }
 
       return res.json({
