@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Task } from '../models/Task';
 import { User } from '../models/User';
+import { RealtimeService } from '../services/RealtimeService';
 
 export class TaskController {
   /**
@@ -106,6 +107,14 @@ export class TaskController {
         formattedDueDate
       );
 
+      // Emit real-time event
+      RealtimeService.emitTaskCreated(req.user.uid, {
+        ...task,
+        owner_id: task.creator_id,
+        creator_email: user.email,
+        access_permission: 'owner',
+      });
+
       return res.json({
         success: true,
         message: 'Task created',
@@ -144,6 +153,9 @@ export class TaskController {
       }
 
       const task = await Task.updateStatus(taskId, status, user.id);
+
+      // Emit real-time event to all users with access to this task
+      RealtimeService.emitTaskStatusChanged(req.user.uid, taskId, status);
 
       return res.json({
         success: true,
@@ -187,6 +199,9 @@ export class TaskController {
         status,
         due_date,
       });
+
+      // Emit real-time event
+      RealtimeService.emitTaskUpdated(req.user.uid, task);
 
       return res.json({
         success: true,
@@ -241,6 +256,9 @@ export class TaskController {
       if (!deleted) {
         return res.status(500).json({ error: 'Failed to delete task' });
       }
+
+      // Emit real-time event
+      RealtimeService.emitTaskDeleted(req.user.uid, taskId);
 
       return res.json({
         success: true,
@@ -304,6 +322,19 @@ export class TaskController {
 
       const share = await Task.shareTask(taskId, user.id, email, permission || 'view');
 
+      // Get the task details
+      const task = await Task.findByIdAndUserId(taskId, user.id);
+      
+      // Get recipient user ID
+      const recipientUser = await User.findByEmail(email);
+        console.log('[TaskController] Share task:', { taskId, email, recipientUserId: recipientUser?.id, hasTask: !!task });
+      
+      if (recipientUser && task) {
+        // Emit real-time event to recipient
+          console.log('[TaskController] Emitting task_shared event to:', recipientUser.auth0_id);
+        RealtimeService.emitTaskShared(recipientUser.auth0_id, task, user.email);
+      }
+
       return res.json({
         success: true,
         message: 'Task shared',
@@ -348,6 +379,13 @@ export class TaskController {
 
       if (!unshared) {
         return res.status(404).json({ error: 'Share not found' });
+      }
+
+      // Get recipient user ID
+      const recipientUser = await User.findByEmail(email);
+      if (recipientUser) {
+        // Emit real-time event to recipient
+        RealtimeService.emitTaskUnshared(recipientUser.auth0_id, taskId, user.email);
       }
 
       return res.json({
