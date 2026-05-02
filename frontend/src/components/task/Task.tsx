@@ -7,6 +7,7 @@ import Footer from '../home/Footert'
 import { TaskFormModal } from '../common/TaskFormModal'
 import { ShareModal } from '../common/ShareModal'
 import { useTaskForm } from '../../hooks/useTaskForm'
+import { useRealtime } from '../../hooks/useRealtime'
 import { auth } from '../../auth/Auth'
 import { taskAPI } from '../../services/api'
 import type { Task as TaskType, TaskPriority, TaskStatus } from '../../types/type'
@@ -286,6 +287,79 @@ function Task() {
   const [shareTaskId, setShareTaskId] = useState<string | null>(null)
   
   const { formMode, editingId, formData, setFormData, handleAddTask, handleEditTask, handleCancel, handleSaveTask } = useTaskForm()
+  const { on: onRealtime } = useRealtime()
+
+  // Setup real-time listeners
+  useEffect(() => {
+    const unsubscribe1 = onRealtime('task_created', (task: any) => {
+      console.log('📢 Real-time: Task created', task);
+      setTasks((prevTasks) => {
+        if (prevTasks.some((existingTask) => existingTask.id === task.id)) {
+          return prevTasks;
+        }
+        return [formatTaskFromAPI(task), ...prevTasks];
+      });
+    });
+
+    const unsubscribe2 = onRealtime('task_updated', (task: any) => {
+      console.log('📢 Real-time: Task updated', task);
+      setTasks((prevTasks) =>
+        prevTasks.map((t) => (t.id === task.id ? formatTaskFromAPI(task) : t))
+      );
+    });
+
+    const unsubscribe3 = onRealtime('task_deleted', (data: any) => {
+      console.log('📢 Real-time: Task deleted', data.taskId);
+      setTasks((prevTasks) => prevTasks.filter((t) => t.id !== data.taskId));
+    });
+
+    const unsubscribe4 = onRealtime('task_status_changed', (data: any) => {
+      console.log('📢 Real-time: Task status changed', data);
+      setTasks((prevTasks) =>
+        prevTasks.map((t) =>
+          t.id === data.taskId ? { ...t, status: data.status } : t
+        )
+      );
+    });
+
+    const unsubscribe5 = onRealtime('task_shared', (data: any) => {
+      console.log('📢 Real-time: Task shared with you', data);
+      setTasks((prevTasks) => {
+        if (prevTasks.some((existingTask) => existingTask.id === data.task.id)) {
+          return prevTasks;
+        }
+        return [formatTaskFromAPI(data.task), ...prevTasks];
+      });
+    });
+
+    const unsubscribe6 = onRealtime('task_unshared', (data: any) => {
+      console.log('📢 Real-time: Task unshared', data.taskId);
+      setTasks((prevTasks) => prevTasks.filter((t) => t.id !== data.taskId));
+    });
+
+    return () => {
+      unsubscribe1();
+      unsubscribe2();
+      unsubscribe3();
+      unsubscribe4();
+      unsubscribe5();
+      unsubscribe6();
+    };
+  }, [onRealtime]);
+
+  // Helper function to format task from API response
+  const formatTaskFromAPI = (task: any): TaskType => ({
+    id: task.id,
+    title: task.title,
+    description: task.description || '',
+    due: task.due_date || '',
+    priority: task.priority,
+    status: task.status,
+    createdAt: task.created_at?.split('T')[0] || '',
+    creator_id: task.creator_id,
+    creator_email: task.creator_email,
+    access_permission: task.access_permission,
+  });
 
   // Fetch tasks from backend on component mount
   useEffect(() => {
@@ -316,18 +390,7 @@ function Task() {
 
       if (data.success) {
         // Format data from API to match TaskType
-        const formattedTasks = data.tasks.map((task: any) => ({
-          id: task.id,
-          title: task.title,
-          description: task.description,
-          due: task.due_date || '',
-          priority: task.priority,
-          status: task.status,
-          createdAt: task.created_at?.split('T')[0] || '',
-          creator_id: task.creator_id,
-          creator_email: task.creator_email,
-          access_permission: task.access_permission,
-        }));
+        const formattedTasks = data.tasks.map((task: any) => formatTaskFromAPI(task));
         setTasks(formattedTasks);
         console.log('Tasks loaded:', formattedTasks);
       }
@@ -405,18 +468,7 @@ function Task() {
 
         if (response.success) {
           console.log('Task created and saved to database');
-          const createdTask: TaskType = {
-            id: response.task.id,
-            title: response.task.title,
-            description: response.task.description || '',
-            due: response.task.due_date || '',
-            priority: response.task.priority,
-            status: response.task.status,
-            createdAt: response.task.created_at?.split('T')[0] || '',
-            creator_id: response.task.creator_id,
-            creator_email: response.task.creator_email,
-            access_permission: response.task.access_permission || 'owner',
-          }
+          const createdTask = formatTaskFromAPI(response.task);
           setTasks([createdTask, ...tasks])
           handleCancel();
         } else {

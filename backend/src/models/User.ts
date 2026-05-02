@@ -12,6 +12,22 @@ export interface IUser {
 
 export class User {
   /**
+   * Find user by database ID
+   */
+  static async findById(id: string): Promise<IUser | null> {
+    try {
+      const result = await pool.query(
+        'SELECT * FROM users WHERE id = $1',
+        [id]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Error finding user by ID:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Find user by email
    */
   static async findByEmail(email: string): Promise<IUser | null> {

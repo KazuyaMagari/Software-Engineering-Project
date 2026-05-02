@@ -343,6 +343,31 @@ export class Task {
   }
 
   /**
+   * Get all realtime recipients for a task.
+   */
+  static async getRealtimeRecipients(taskId: string): Promise<Array<{ auth0_id: string; access_permission: 'owner' | 'view' | 'edit' }>> {
+    try {
+      const result = await pool.query(
+        `SELECT DISTINCT u.auth0_id, 'owner'::text as access_permission
+         FROM tasks t
+         INNER JOIN users u ON t.creator_id = u.id
+         WHERE t.id = $1
+         UNION
+         SELECT DISTINCT u.auth0_id, ts.permission as access_permission
+         FROM task_shares ts
+         INNER JOIN users u ON ts.shared_with_id = u.id
+         WHERE ts.task_id = $1`,
+        [taskId]
+      );
+
+      return result.rows;
+    } catch (error) {
+      console.error('Error fetching realtime recipients:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Share a task with another user
    */
   static async shareTask(taskId: string, sharedByUserId: string, sharedWithEmail: string, permission: string = 'view'): Promise<any> {
