@@ -293,7 +293,12 @@ function Task() {
   useEffect(() => {
     const unsubscribe1 = onRealtime('task_created', (task: any) => {
       console.log('📢 Real-time: Task created', task);
-      setTasks((prevTasks) => [formatTaskFromAPI(task), ...prevTasks]);
+      setTasks((prevTasks) => {
+        if (prevTasks.some((existingTask) => existingTask.id === task.id)) {
+          return prevTasks;
+        }
+        return [formatTaskFromAPI(task), ...prevTasks];
+      });
     });
 
     const unsubscribe2 = onRealtime('task_updated', (task: any) => {
@@ -319,7 +324,12 @@ function Task() {
 
     const unsubscribe5 = onRealtime('task_shared', (data: any) => {
       console.log('📢 Real-time: Task shared with you', data);
-      setTasks((prevTasks) => [formatTaskFromAPI(data.task), ...prevTasks]);
+      setTasks((prevTasks) => {
+        if (prevTasks.some((existingTask) => existingTask.id === data.task.id)) {
+          return prevTasks;
+        }
+        return [formatTaskFromAPI(data.task), ...prevTasks];
+      });
     });
 
     const unsubscribe6 = onRealtime('task_unshared', (data: any) => {
