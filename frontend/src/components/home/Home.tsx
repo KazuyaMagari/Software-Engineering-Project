@@ -1,18 +1,37 @@
+import { useEffect, useState } from 'react'
+import { onAuthStateChanged } from 'firebase/auth'
 import Navbar from './Navbar'
 import Footer from './Footert'
+import { TaskFormModal } from '../common/TaskFormModal'
+import { ShareModal } from '../common/ShareModal'
+import { useTaskForm } from '../../hooks/useTaskForm'
+import { taskAPI, authAPI } from '../../services/api'
+import { auth } from '../../auth/Auth'
 import styled from 'styled-components'
+import type { Task as TaskType } from '../../types/type'
 
-const myTasks = [
-  { title: 'API Integration: Task Comments', due: 'Today 18:00', priority: 'High', status: 'In progress' },
-  { title: 'Sprint Planning Notes', due: 'Tomorrow 10:00', priority: 'Medium', status: 'Open' },
-  { title: 'UI Fix: Mobile Navbar', due: 'Mar 24', priority: 'Low', status: 'Review' },
-]
-
-const timeline = [
-  { label: 'Completed', value: '24', hint: 'Tasks this week' },
-  { label: 'On Track', value: '11', hint: 'Current sprint' },
-  { label: 'Overdue', value: '3', hint: 'Need attention' },
-]
+// Helper function to format due date
+const formatDueDate = (dateString: string | undefined): string => {
+  if (!dateString) return 'No date'
+  
+  const date = new Date(dateString)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  
+  const dueDate = new Date(dateString)
+  dueDate.setHours(0, 0, 0, 0)
+  
+  if (dueDate.getTime() === today.getTime()) {
+    return 'Today'
+  } else if (dueDate.getTime() === tomorrow.getTime()) {
+    return 'Tomorrow'
+  } else {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+}
 
 const Page = styled.div`
   min-height: 100vh;
@@ -105,24 +124,9 @@ const BtnGhost = styled(Btn)`
   background: #ffffff;
 `
 
-const HeroHighlight = styled.div`
-  border: 1px solid #e5e7eb;
-  background: #f9fafb;
-  border-radius: 10px;
-  padding: 1rem;
-  align-self: center;
-`
-
 const Label = styled.p`
   margin: 0;
   color: #6b7280;
-`
-
-const Number = styled.p`
-  margin: 0.3rem 0 0.1rem;
-  font-size: clamp(1.8rem, 4vw, 2.4rem);
-  font-weight: 700;
-  color: #111827;
 `
 
 const OverviewGrid = styled.section`
@@ -248,13 +252,149 @@ const PanelCopy = styled.p`
   color: #4b5563;
 `
 
-
-const FullButton = styled(BtnPrimary)`
-  margin-top: 0.9rem;
-  width: 100%;
-`
-
 function Home() {
+  const [myTasks, setMyTasks] = useState<TaskType[]>([])
+  const [stats, setStats] = useState({ completed: 0, onTrack: 0, overdue: 0 })
+  const [loading, setLoading] = useState(true)
+  const [shareTaskId, setShareTaskId] = useState<string | null>(null)
+  const {
+    formMode,
+    formData,
+    setFormData,
+    handleAddTask,
+    handleCancel,
+    handleSaveTask,
+  } = useTaskForm()
+
+  // Fetch tasks from backend
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user?.email) {
+        try {
+          setLoading(true)
+          
+          // Register user first (ensures they're in database)
+          try {
+            await authAPI.registerUser()
+          } catch (registerError) {
+            console.error('Registration error:', registerError)
+          }
+          
+          // Fetch tasks using authenticated API (includes shared tasks)
+          const data = await taskAPI.getAccessibleTasks()
+
+          if (data.success && data.tasks && Array.isArray(data.tasks)) {
+            // Transform tasks to match TaskType (convert DB format to UI format)
+            const transformedTasks: TaskType[] = data.tasks.map((task: any) => ({
+              id: task.id,
+              title: task.title,
+              due: formatDueDate(task.due_date),
+              priority: task.priority,
+              status: task.status,
+              description: task.description || '',
+              createdAt: task.created_at,
+              creator_id: task.creator_id,
+              creator_email: task.creator_email,
+              access_permission: task.access_permission,
+            }))
+
+            setMyTasks(transformedTasks)
+
+            // Calculate stats
+            const completed = data.tasks.filter((t: any) => t.status === 'Completed').length
+            const onTrack = data.tasks.filter((t: any) =>
+              ['Open', 'In progress', 'Review'].includes(t.status)
+            ).length
+            const overdue = data.tasks.filter((t: any) => t.status === 'Overdue').length
+
+            setStats({ completed, onTrack, overdue })
+          }
+        } catch (error) {
+          console.error('Failed to fetch tasks:', error)
+          setMyTasks([])
+        } finally {
+          setLoading(false)
+        }
+      } else {
+        setLoading(false)
+      }
+    })
+
+    return () => unsubscribe()
+  }, [])
+
+  const handleSaveTaskForm = async (e: React.FormEvent) => {
+    const result = handleSaveTask(e, myTasks)
+    if (result.success && result.newTask && auth.currentUser?.email) {
+      try {
+        // Format due date to YYYY-MM-DD if it's in other format
+        let dueDate = result.newTask.due || null;
+        if (dueDate && dueDate !== 'No date' && dueDate !== 'Today' && dueDate !== 'Tomorrow') {
+          // If already in YYYY-MM-DD format, keep it
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+            // Try to parse and convert
+            const dateObj = new Date(dueDate);
+            if (!isNaN(dateObj.getTime())) {
+              dueDate = dateObj.toISOString().split('T')[0];
+            } else {
+              dueDate = null;
+            }
+          }
+        } else if (dueDate === 'Today' || dueDate === 'Tomorrow') {
+          dueDate = null; // Convert relative dates back to null for backend
+        }
+
+        // Send to backend using authenticated API
+        const taskResponse = await taskAPI.createTask({
+          title: result.newTask.title,
+          description: result.newTask.description,
+          priority: result.newTask.priority,
+          status: result.newTask.status,
+          due_date: dueDate,
+        });
+
+        if (taskResponse) {
+          console.log('✅ Task created successfully in database');
+          
+          // Add the new task from backend response to local state
+          if (taskResponse.task) {
+            const newTask: TaskType = {
+              id: taskResponse.task.id,
+              title: taskResponse.task.title,
+              due: formatDueDate(taskResponse.task.due_date),
+              priority: taskResponse.task.priority,
+              status: taskResponse.task.status,
+              description: taskResponse.task.description || '',
+              createdAt: taskResponse.task.created_at,
+              creator_id: taskResponse.task.creator_id,
+              creator_email: taskResponse.task.creator_email,
+              access_permission: taskResponse.task.access_permission || 'owner',
+            }
+            setMyTasks([newTask, ...myTasks])
+            
+            // Update stats
+            const completed = (newTask.status === 'Completed' ? 1 : 0) + stats.completed
+            const onTrack = (['Open', 'In progress', 'Review'].includes(newTask.status) ? 1 : 0) + stats.onTrack
+            const overdue = (newTask.status === 'Overdue' ? 1 : 0) + stats.overdue
+            setStats({ completed, onTrack, overdue })
+          }
+        }
+      } catch (error) {
+        console.error('Failed to save task:', error);
+        alert('Failed to save task. Please try again.');
+      }
+    }
+  }
+
+  const getPriorityColor = (priority: string) => {
+    const colors: Record<string, string> = {
+      High: '#ef4444',
+      Medium: '#f59e0b',
+      Low: '#10b981',
+    }
+    return colors[priority] || '#6b7280'
+  }
+
   return (
     <Page>
       <Navbar />
@@ -268,58 +408,89 @@ function Home() {
               Track priorities, align teammates, and keep delivery predictable with clear ownership and live progress.
             </HeroDescription>
             <HeroActions>
-              <BtnPrimary type="button">Create Task</BtnPrimary>
-              <BtnGhost type="button">View Reports</BtnGhost>
+              <BtnPrimary type="button" onClick={handleAddTask}>
+                Create Task
+              </BtnPrimary>
+              <BtnGhost type="button" onClick={() => window.location.href = '/dashboard'}>
+                View Dashboard
+              </BtnGhost>
             </HeroActions>
           </HeroCopy>
-          <HeroHighlight role="status" aria-live="polite">
-            <Label>Weekly Completion</Label>
-            <Number>82%</Number>
-            <Label>+9% compared to last week</Label>
-          </HeroHighlight>
         </HeroPanel>
 
         <OverviewGrid aria-label="Project overview">
-          {timeline.map((item) => (
-            <MetricCard key={item.label}>
-              <Label>{item.label}</Label>
-              <MetricValue>{item.value}</MetricValue>
-              <Label>{item.hint}</Label>
-            </MetricCard>
-          ))}
+          <MetricCard>
+            <Label>Completed</Label>
+            <MetricValue>{stats.completed}</MetricValue>
+            <Label>Tasks this week</Label>
+          </MetricCard>
+          <MetricCard>
+            <Label>On Track</Label>
+            <MetricValue>{stats.onTrack}</MetricValue>
+            <Label>Current sprint</Label>
+          </MetricCard>
+          <MetricCard>
+            <Label>Overdue</Label>
+            <MetricValue>{stats.overdue}</MetricValue>
+            <Label>Need attention</Label>
+          </MetricCard>
         </OverviewGrid>
 
         <ContentGrid>
           <Panel aria-labelledby="my-tasks-title">
             <PanelHeader>
               <h2 id="my-tasks-title">My Tasks</h2>
-              <PanelLink href="#">See all</PanelLink>
+              <PanelLink href="/task">See all</PanelLink>
             </PanelHeader>
-            <TaskList>
-              {myTasks.map((task) => (
-                <TaskItem key={task.title}>
-                  <div>
-                    <TaskTitle>{task.title}</TaskTitle>
-                    <TaskMeta>Due {task.due}</TaskMeta>
-                  </div>
-                  <TaskTags>
-                    <Tag>{task.priority}</Tag>
-                    <StatusTag>{task.status}</StatusTag>
-                  </TaskTags>
-                </TaskItem>
-              ))}
-            </TaskList>
-          </Panel>
-
-          <Panel aria-labelledby="ai-title">
-            <h2 id="ai-title">AI Assistant</h2>
-            <PanelCopy>
-              Smart planning suggestions are available. Ask for workload balancing, overdue risk prediction, and next best actions.
-            </PanelCopy>
-              <FullButton type="button">Apply Suggestion</FullButton>
+            {loading ? (
+              <PanelCopy>Loading tasks...</PanelCopy>
+            ) : myTasks.length === 0 ? (
+              <PanelCopy>No tasks yet. Create one to get started!</PanelCopy>
+            ) : (
+              <TaskList>
+                {myTasks.map((task) => (
+                  <TaskItem key={task.id} style={{ borderLeftColor: getPriorityColor(task.priority), borderLeftWidth: '3px' }}>
+                    <div>
+                      <TaskTitle>{task.title}</TaskTitle>
+                      <TaskMeta>Due {task.due}</TaskMeta>
+                    </div>
+                    <TaskTags>
+                      <Tag>{task.priority}</Tag>
+                      <StatusTag>{task.status}</StatusTag>
+                      {task.access_permission === 'owner' && (
+                        <button onClick={() => setShareTaskId(task.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem' }} title="Share">
+                          🔗
+                        </button>
+                      )}
+                    </TaskTags>
+                  </TaskItem>
+                ))}
+              </TaskList>
+            )}
           </Panel>
         </ContentGrid>
       </Main>
+
+      {/* Task Form Modal */}
+      <TaskFormModal
+        isOpen={formMode !== null}
+        mode={formMode}
+        formData={formData}
+        onFormDataChange={setFormData}
+        onSave={handleSaveTaskForm}
+        onCancel={handleCancel}
+      />
+
+      {/* Share Modal */}
+      {shareTaskId && (
+        <ShareModal
+          taskId={shareTaskId}
+          onClose={() => setShareTaskId(null)}
+          onShareSuccess={() => {
+            setShareTaskId(null)
+          }}
+        />
+      )}
 
       <Footer />
     </Page>
