@@ -12,6 +12,8 @@ export interface Task {
   creator_id?: string
   creator_email?: string
   access_permission?: 'owner' | 'view' | 'edit'
+  attachments?: string[]
+  tags?: string[]
 }
 
 export interface TaskFilter {
