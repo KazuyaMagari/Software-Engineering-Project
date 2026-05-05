@@ -20,9 +20,9 @@
 
 **Authentication:** [Firebase](https://firebase.google.com/)
 
-**Storage:** [Google Cloud Storage via Google Cloud Storage, Firebase, Azure, Amazon, Dropbox](#)
+**Storage:** Firebase
 
-**Hosting:** [Netlify or Vercel](#)
+**Hosting:** [Vercel](https://vercel.com/)
 
 **Code Versioning and Featuring:** [Github](https://github.com/)
 
@@ -41,6 +41,7 @@
 ## Backend: Matthew
 **Backend tools used:**
 - [Express.js](https://expressjs.com/)
+- [Render](https://render.com/)
 ---
 ## In progress UI (3/21 Kazuya)
 
