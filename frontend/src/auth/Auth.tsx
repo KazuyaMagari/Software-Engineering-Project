@@ -3,7 +3,7 @@ import { getAuth, signOut, onAuthStateChanged, signInWithPopup, GoogleAuthProvid
 import type { User } from "firebase/auth";
 import { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
-import { authAPI } from "../services/api";
+import { authAPI, taskAPI } from "../services/api";
 
 // Your web app's Firebase configuration (values are provided via Vite env vars)
 const firebaseConfig = {
@@ -99,11 +99,7 @@ export function Auth() {
           registeredUserIdRef.current = user.uid;
 
           // Fetch user's tasks
-          const tasksData = await fetch('http://localhost:3000/api/tasks', {
-            headers: {
-              'Authorization': `Bearer ${await user.getIdToken()}`,
-            },
-          }).then(res => res.json());
+          const tasksData = await taskAPI.getTasks();
           console.log("User tasks:", tasksData);
         } catch (error) {
           console.error("Backend connection error:", error);
