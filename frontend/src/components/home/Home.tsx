@@ -10,6 +10,23 @@ import { auth } from '../../auth/Auth'
 import styled from 'styled-components'
 import type { Task as TaskType } from '../../types/type'
 
+const isOverdue = (status: TaskType['status'], dueDate?: string): boolean => {
+  if (!dueDate || status === 'Completed' || status === 'Overdue') return false
+
+  const due = new Date(dueDate)
+  if (Number.isNaN(due.getTime())) return false
+
+  due.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  return due.getTime() < today.getTime()
+}
+
+const getEffectiveStatus = (status: TaskType['status'], dueDate?: string): TaskType['status'] => {
+  return isOverdue(status, dueDate) ? 'Overdue' : status
+}
+
 // Helper function to format due date
 const formatDueDate = (dateString: string | undefined): string => {
   if (!dateString) return 'No date'
@@ -290,7 +307,7 @@ function Home() {
               title: task.title,
               due: formatDueDate(task.due_date),
               priority: task.priority,
-              status: task.status,
+              status: getEffectiveStatus(task.status, task.due_date),
               description: task.description || '',
               createdAt: task.created_at,
               creator_id: task.creator_id,
@@ -301,11 +318,11 @@ function Home() {
             setMyTasks(transformedTasks)
 
             // Calculate stats
-            const completed = data.tasks.filter((t: any) => t.status === 'Completed').length
+            const completed = data.tasks.filter((t: any) => getEffectiveStatus(t.status, t.due_date) === 'Completed').length
             const onTrack = data.tasks.filter((t: any) =>
-              ['Open', 'In progress', 'Review'].includes(t.status)
+              ['Open', 'In progress', 'Review'].includes(getEffectiveStatus(t.status, t.due_date))
             ).length
-            const overdue = data.tasks.filter((t: any) => t.status === 'Overdue').length
+            const overdue = data.tasks.filter((t: any) => getEffectiveStatus(t.status, t.due_date) === 'Overdue').length
 
             setStats({ completed, onTrack, overdue })
           }
@@ -363,7 +380,7 @@ function Home() {
               title: taskResponse.task.title,
               due: formatDueDate(taskResponse.task.due_date),
               priority: taskResponse.task.priority,
-              status: taskResponse.task.status,
+              status: getEffectiveStatus(taskResponse.task.status, taskResponse.task.due_date),
               description: taskResponse.task.description || '',
               createdAt: taskResponse.task.created_at,
               creator_id: taskResponse.task.creator_id,

@@ -151,6 +151,11 @@ export function TaskFormModal({
   onCancel,
 }: TaskFormModalProps) {
 
+  const normalizeDueDate = (value: string): string => {
+    const match = value.match(/\d{4}-\d{2}-\d{2}/)
+    return match ? match[0] : ''
+  }
+
   /* State */
 
   // AI prompt
@@ -284,10 +289,9 @@ Return ONLY valid JSON. No commentary.
             <Label htmlFor="due">Due Date</Label>
             <Input
               id="due"
-              type="text"
-              value={formData.due || ''}
+              type="date"
+              value={normalizeDueDate(formData.due || '')}
               onChange={(e) => onFormDataChange({ ...formData, due: e.target.value })}
-              placeholder="e.g., 2027-04-25, 00:00"
             />
           </FormGroup>
 
