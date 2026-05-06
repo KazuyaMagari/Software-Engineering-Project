@@ -289,6 +289,11 @@ function Task() {
   const { formMode, editingId, formData, setFormData, handleAddTask, handleEditTask, handleCancel, handleSaveTask } = useTaskForm()
   const { on: onRealtime } = useRealtime()
 
+  const formatDueDate = (due: string): string => {
+    const match = due.match(/\d{4}-\d{2}-\d{2}/)
+    return match ? match[0] : due
+  }
+
   // Setup real-time listeners
   useEffect(() => {
     const unsubscribe1 = onRealtime('task_created', (task: any) => {
@@ -631,7 +636,7 @@ function Task() {
                         {task.access_permission && task.access_permission !== 'owner' ? (
                           <TaskPermission>{task.access_permission === 'view' ? 'View only' : 'Can edit'}</TaskPermission>
                         ) : null}
-                        {task.due || '—'}
+                        {task.due ? formatDueDate(task.due) : '—'}
                       </TaskDueDate>
                       <TaskActions>
                         {task.access_permission !== 'view' && (
