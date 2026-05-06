@@ -3,10 +3,24 @@ import styled from 'styled-components'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useAnalytics } from '../../hooks/useAnalytics'
 import type { TaskStats, PriorityBreakdown } from '../../hooks/useAnalytics'
+import { taskAPI } from '../../services/api'
 import Navbar from '../home/Navbar'
 import Footer from '../home/Footert'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '../../auth/Auth'
+
+const isOverdue = (status: string, dueDate?: string) => {
+  if (!dueDate || status === 'Completed' || status === 'Overdue') return false
+
+  const due = new Date(dueDate)
+  if (Number.isNaN(due.getTime())) return false
+
+  due.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  return due.getTime() < today.getTime()
+}
 
 const Page = styled.div`
   min-height: 100vh;
@@ -93,12 +107,48 @@ export default function Dashboard() {
     if (!user) return
 
     const fetchData = async () => {
-      const [s, priority] = await Promise.all([
-        getTaskStats(),
-        getPriorityBreakdown()
-      ])
-      if (s) setStats(s)
-      if (priority) setPriorityData(priority)
+      try {
+        const [s, priority, accessibleTasks] = await Promise.all([
+          getTaskStats(),
+          getPriorityBreakdown(),
+          taskAPI.getAccessibleTasks(),
+        ])
+
+        if (s && accessibleTasks?.success && Array.isArray(accessibleTasks.tasks)) {
+          const computed = {
+            total: 0,
+            completed: 0,
+            in_progress: 0,
+            open: 0,
+            review: 0,
+            overdue: 0,
+            completion_rate: 0,
+          }
+
+          for (const task of accessibleTasks.tasks) {
+            const effectiveStatus = isOverdue(task.status, task.due_date) ? 'Overdue' : task.status
+            computed.total += 1
+
+            if (effectiveStatus === 'Completed') computed.completed += 1
+            if (effectiveStatus === 'In progress') computed.in_progress += 1
+            if (effectiveStatus === 'Open') computed.open += 1
+            if (effectiveStatus === 'Review') computed.review += 1
+            if (effectiveStatus === 'Overdue') computed.overdue += 1
+          }
+
+          computed.completion_rate = computed.total > 0
+            ? Number(((computed.completed * 100) / computed.total).toFixed(1))
+            : 0
+
+          setStats(computed)
+        } else if (s) {
+          setStats(s)
+        }
+
+        if (priority) setPriorityData(priority)
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error)
+      }
     }
 
     fetchData()
